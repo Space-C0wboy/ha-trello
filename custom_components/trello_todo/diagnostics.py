@@ -9,7 +9,7 @@ from homeassistant.core import HomeAssistant
 from .const import CONF_BOARD_ID, SUBENTRY_BOARD
 from .coordinator import TrelloConfigEntry
 
-TO_REDACT = {"token"}
+TO_REDACT = {"token", "webhooks"}
 
 
 async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: TrelloConfigEntry) -> dict[str, Any]:

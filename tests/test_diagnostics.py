@@ -6,7 +6,11 @@ from .common import ACCESS_TOKEN, CLIENT_SECRET, REFRESH_TOKEN, subentry_id
 
 async def test_diagnostics_redacts_tokens(hass, loaded):
     diag = await async_get_config_entry_diagnostics(hass, loaded)
-    assert diag["entry"]["data"] == {"auth_implementation": "trello_todo", "token": "**REDACTED**"}
+    assert diag["entry"]["data"] == {
+        "auth_implementation": "trello_todo",
+        "token": "**REDACTED**",
+        "webhooks": "**REDACTED**",
+    }
     assert diag["entry"]["options"] == {"scan_interval": 120}
     (b1,) = diag["boards"]
     assert b1 == {

@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
@@ -38,6 +38,9 @@ from .const import (
     WEBHOOK_REFRESH_MINUTES,
 )
 
+if TYPE_CHECKING:
+    from .webhooks import WebhookManager
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -47,6 +50,7 @@ class TrelloRuntimeData:
     boards: dict[str, TrelloBoardCoordinator]  # sub-entry id -> coordinator
     board_settings: dict[str, dict[str, Any]]  # sub-entry id -> sub-entry data, as loaded
     options: dict[str, Any]  # account options, as loaded
+    webhooks: WebhookManager | None = None
 
 
 type TrelloConfigEntry = ConfigEntry[TrelloRuntimeData]

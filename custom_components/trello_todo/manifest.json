@@ -1,12 +1,16 @@
 {
   "domain": "trello_todo",
   "name": "Trello",
+  "after_dependencies": [
+    "cloud"
+  ],
   "codeowners": [
     "@Space-C0wboy"
   ],
   "config_flow": true,
   "dependencies": [
-    "application_credentials"
+    "application_credentials",
+    "webhook"
   ],
   "documentation": "https://github.com/Space-C0wboy/ha-trello",
   "integration_type": "service",

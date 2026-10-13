@@ -1,6 +1,7 @@
 """Trello for Home Assistant: boards as devices, lists as to-do lists."""
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.const import Platform
@@ -10,8 +11,11 @@ from homeassistant.helpers import config_entry_oauth2_flow, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TrelloAccessError, TrelloClient
-from .const import CONF_BOARD_ID, DOMAIN, MODE_FEED, SUBENTRY_BOARD
+from .const import CONF_BOARD_ID, CONF_WEBHOOKS, DOMAIN, SUBENTRY_BOARD
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry, TrelloRuntimeData
+from .webhooks import WebhookManager
+
+_LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.TODO, Platform.EVENT]
 
@@ -50,11 +54,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
     for coordinator in boards.values():
         # Baseline: anything that happened before this start is not replayed as events.
         await coordinator.async_poll_feed()
+    manager = WebhookManager(hass, entry, client, getattr(implementation, "client_secret", "") or "")
+    entry.runtime_data.webhooks = manager
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     for coordinator in boards.values():
         entry.async_on_unload(coordinator.async_stop_feed)
-        coordinator.set_mode(MODE_FEED)  # Task 6: the WebhookManager decides per board
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await manager.async_setup(boards.values())
+    entry.async_on_unload(manager.async_unload)
     return True
 
 
@@ -75,3 +82,23 @@ async def _async_update_listener(hass: HomeAssistant, entry: TrelloConfigEntry) 
 
 async def async_unload_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bool:
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+
+
+async def async_remove_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> None:
+    """Account removed from HA: delete its Trello webhooks and cloudhooks (best effort)."""
+    states = entry.data.get(CONF_WEBHOOKS) or {}
+    if not states:
+        return
+    try:
+        implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(hass, entry)
+        session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
+
+        async def get_token() -> str:
+            await session.async_ensure_token_valid()
+            return session.token["access_token"]
+
+        manager = WebhookManager(hass, entry, TrelloClient(async_get_clientsession(hass), get_token), "")
+        for board_id in list(states):
+            await manager.async_remove_board(board_id, save=False)
+    except Exception:  # noqa: BLE001 - removal must never fail because Trello is unreachable
+        _LOGGER.debug("Could not clean up Trello webhooks for %s", entry.title, exc_info=True)
