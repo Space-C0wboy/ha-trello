@@ -190,3 +190,19 @@ async def test_list_moved_between_boards(hass, load_entry, mock_trello):
     reg = er.async_get(hass).async_get(er.async_get(hass).async_get_entity_id("todo", DOMAIN, "l_sam"))
     assert reg.config_subentry_id == subentry_id(entry, "b2")
     assert hass.states.get(reg.entity_id) is not None
+
+
+
+async def test_list_cleanup_keeps_other_platform_entities(hass, loaded):
+    """The stale-list purge must only touch todo entities: the event platform may register first."""
+    from custom_components.trello_todo.todo import _ListTracker
+
+    registry = er.async_get(hass)
+    activity = registry.async_get_entity_id("event", DOMAIN, "b1_activity")
+    assert activity is not None
+    sid = subentry_id(loaded, "b1")
+    tracker = _ListTracker(hass, loaded, sid, _coordinator(loaded), lambda *args, **kwargs: None)
+    tracker.sync()  # first sync of a tracker runs the purge, as at startup
+    await hass.async_block_till_done()
+    assert registry.async_get(activity) is not None
+    assert hass.states.get(activity) is not None

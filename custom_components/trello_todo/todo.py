@@ -72,7 +72,12 @@ class _ListTracker:
             # Lists archived while HA was down still have registry entries; drop them once.
             self._purged = True
             for reg in er.async_entries_for_config_entry(registry, self._entry.entry_id):
-                if reg.config_subentry_id == self._subentry_id and reg.unique_id not in board.lists:
+                # Only this board's todo entities: the event entity shares the sub-entry and may register first.
+                if (
+                    reg.domain == "todo"
+                    and reg.config_subentry_id == self._subentry_id
+                    and reg.unique_id not in board.lists
+                ):
                     registry.async_remove(reg.entity_id)
         new = []
         for list_id in board.lists:
