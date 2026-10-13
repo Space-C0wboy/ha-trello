@@ -18,7 +18,7 @@ A [HACS](https://hacs.xyz/) custom integration for [Trello](https://trello.com/)
 - **Safe deletes:** deleting an item archives the card. Nothing is ever hard-deleted.
 - **Actions for automations:** create, move, copy, archive, comment, label, assign, checklists and due dates, using names rather than ids.
 - **Trello events for automations:** comments, moves, due dates, assignments and more fire events on an `event` entity per board — within seconds with Nabu Casa or a public HTTPS URL, within a minute otherwise.
-- **Due-date calendar:** each board's due dates in Home Assistant's Calendar panel. Drag an event to change the due date, or delete it to clear the due date.
+- **Due-date calendar:** each board's due dates in Home Assistant's Calendar panel. Change an event's time to change the due date, or delete it to clear the due date.
 - **Due-date sensors:** overdue, due today, due soon and next due for each board, with a per-person breakdown.
 - **Dashboard-friendly attributes:** card names, due dates, labels and members are available in state attributes.
 - **No extra dependencies:** uses only `aiohttp`, which is already bundled with Home Assistant.
@@ -217,7 +217,7 @@ Editing from the Calendar panel:
 
 | You do | Trello gets |
 |--------|-------------|
-| Drag or resize an event | The new due date (and start date, if the event is longer than 30 minutes) |
+| Change an event's start or end time | The end becomes the due date. The start becomes the card's start date, unless the event is exactly 30 minutes long (then the start date is cleared). |
 | Delete an event | The due date and start date are removed. The card stays. |
 
 New events can't be created here (a card needs a list: use `todo.add_item` or `trello_todo.create_card`). All-day events aren't supported. Renaming an event doesn't rename the card.
@@ -227,9 +227,9 @@ New events can't be created here (a card needs a list: use `todo.add_item` or `t
 ```yaml
 triggers:
   - trigger: calendar
-    event: start
+    event: end
     entity_id: calendar.household_due_dates
-    offset: "-0:30:00"
+    offset: "-1:00:00"
 conditions:
   - condition: template
     value_template: "{{ not trigger.calendar_event.summary.startswith('✓') }}"
@@ -239,7 +239,7 @@ actions:
       message: "Due in an hour: {{ trigger.calendar_event.summary }}"
 ```
 
-The event starts 30 minutes before the due time, so an offset of `-0:30:00` fires one hour before the card is due.
+Every event ends at the card's due time, so `event: end` with an offset of `-1:00:00` fires one hour before the card is due, whether or not the card has a start date.
 
 ---
 
