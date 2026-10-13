@@ -86,8 +86,8 @@ def board(
             {"id": "lb2", "name": "", "color": "green"},
         ],
         "members": [
-            {"id": "m1", "fullName": "Sam", "initials": "S"},
-            {"id": "m2", "fullName": "Alex", "initials": "A"},
+            {"id": "m1", "fullName": "Sam", "initials": "S", "username": "sam"},
+            {"id": "m2", "fullName": "Alex", "initials": "A", "username": "alex"},
         ],
     }
 
@@ -190,3 +190,11 @@ def action(aid: str, kind: str, *, by: str = "m2", date: str = "2026-10-13T12:00
     if member is not None:
         record["member"] = member
     return record
+
+
+def card_url(card_id: str) -> re.Pattern[str]:
+    return re.compile(rf"^https://api\.trello\.com/1/cards/{card_id}(\?.*)?$")
+
+
+def checklists_url(card_id: str) -> re.Pattern[str]:
+    return re.compile(rf"^https://api\.trello\.com/1/cards/{card_id}/checklists(\?.*)?$")

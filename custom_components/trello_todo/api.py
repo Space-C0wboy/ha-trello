@@ -19,7 +19,7 @@ BOARD_PARAMS = {
     "labels": "all",
     "label_fields": "name,color",
     "members": "all",
-    "member_fields": "fullName,initials",
+    "member_fields": "fullName,initials,username",
 }
 
 TokenGetter = Callable[[], Awaitable[str]]
@@ -29,6 +29,10 @@ MAX_ACTION_PAGES = 5
 
 class TrelloError(Exception):
     """Any failure talking to Trello. Messages never include the access token."""
+
+    def __init__(self, message: str = "", status: int | None = None) -> None:
+        super().__init__(message)
+        self.status = status
 
 
 class TrelloAuthError(TrelloError):
@@ -47,7 +51,7 @@ class TrelloRateLimitError(TrelloError):
     """Trello returned HTTP 429."""
 
     def __init__(self, retry_after: float | None) -> None:
-        super().__init__("Trello rate limit hit")
+        super().__init__("Trello rate limit hit", 429)
         self.retry_after = retry_after
 
 
@@ -81,6 +85,8 @@ class TrelloBoard:
     lists: dict[str, str]  # list id -> name, in board order
     cards: dict[str, list[TrelloCard]] = field(default_factory=dict)  # list id -> cards in pos order
     members: dict[str, str] = field(default_factory=dict)  # member id -> full name
+    labels: dict[str, TrelloLabel] = field(default_factory=dict)  # label id -> label (all board labels)
+    member_usernames: dict[str, str] = field(default_factory=dict)  # member id -> username
 
     def card(self, card_id: str) -> TrelloCard | None:
         for cards in self.cards.values():
@@ -116,7 +122,15 @@ def parse_board(raw: dict[str, Any]) -> TrelloBoard:
             cards[c["idList"]].append(parse_card(c, labels, initials))
     for list_cards in cards.values():
         list_cards.sort(key=lambda card: card.pos)
-    return TrelloBoard(id=raw["id"], name=raw.get("name") or "", lists=lists, cards=cards, members=names)
+    return TrelloBoard(
+        id=raw["id"],
+        name=raw.get("name") or "",
+        lists=lists,
+        cards=cards,
+        members=names,
+        labels=labels,
+        member_usernames={m["id"]: m.get("username") or "" for m in raw.get("members", [])},
+    )
 
 
 class TrelloClient:
@@ -137,19 +151,19 @@ class TrelloClient:
                 method, f"{BASE_URL}{path}", params=params, json=json, headers=headers, timeout=TIMEOUT
             ) as resp:
                 if resp.status == 401:
-                    raise TrelloAuthError("Trello rejected the access token")
+                    raise TrelloAuthError("Trello rejected the access token", 401)
                 if resp.status in (403, 404):
-                    raise TrelloAccessError(f"Trello returned HTTP {resp.status} for {method} {path}")
+                    raise TrelloAccessError(f"Trello returned HTTP {resp.status} for {method} {path}", resp.status)
                 if resp.status == 429:
                     retry_after = resp.headers.get("Retry-After")
                     raise TrelloRateLimitError(float(retry_after) if retry_after else None)
                 if resp.status >= 500:
-                    raise TrelloConnectionError(f"Trello returned HTTP {resp.status}")
+                    raise TrelloConnectionError(f"Trello returned HTTP {resp.status}", resp.status)
                 if resp.status >= 400:
                     text = (await resp.text())[:200]
                     if resp.status == 400 and "already exists" in text:
-                        raise TrelloWebhookExistsError("Trello already has this webhook")
-                    raise TrelloError(f"Trello returned HTTP {resp.status} for {method} {path}: {text}")
+                        raise TrelloWebhookExistsError("Trello already has this webhook", 400)
+                    raise TrelloError(f"Trello returned HTTP {resp.status} for {method} {path}: {text}", resp.status)
                 return await resp.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError) as err:
             raise TrelloConnectionError(f"Error talking to Trello: {type(err).__name__}") from None
@@ -213,3 +227,37 @@ class TrelloClient:
                 break
             params = {**params, "before": page[-1]["id"]}
         return actions
+
+    async def get_card(self, card_id: str) -> dict[str, Any]:
+        return await self._request("GET", f"/cards/{card_id}", {"fields": "idBoard,idList,name,shortUrl,closed"})
+
+    async def add_comment(self, card_id: str, text: str) -> dict[str, Any]:
+        return await self._request("POST", f"/cards/{card_id}/actions/comments", json={"text": text})
+
+    async def add_label(self, card_id: str, label_id: str) -> None:
+        await self._request("POST", f"/cards/{card_id}/idLabels", json={"value": label_id})
+
+    async def remove_label(self, card_id: str, label_id: str) -> None:
+        await self._request("DELETE", f"/cards/{card_id}/idLabels/{label_id}")
+
+    async def add_member(self, card_id: str, member_id: str) -> None:
+        await self._request("POST", f"/cards/{card_id}/idMembers", json={"value": member_id})
+
+    async def remove_member(self, card_id: str, member_id: str) -> None:
+        await self._request("DELETE", f"/cards/{card_id}/idMembers/{member_id}")
+
+    async def get_checklists(self, card_id: str) -> list[dict[str, Any]]:
+        return await self._request(
+            "GET",
+            f"/cards/{card_id}/checklists",
+            {"fields": "name", "checkItems": "all", "checkItem_fields": "name,state"},
+        )
+
+    async def create_checklist(self, card_id: str, name: str) -> dict[str, Any]:
+        return await self._request("POST", f"/cards/{card_id}/checklists", json={"name": name})
+
+    async def add_check_item(self, checklist_id: str, name: str) -> dict[str, Any]:
+        return await self._request("POST", f"/checklists/{checklist_id}/checkItems", json={"name": name})
+
+    async def set_check_item(self, card_id: str, item_id: str, state: str) -> dict[str, Any]:
+        return await self._request("PUT", f"/cards/{card_id}/checkItem/{item_id}", json={"state": state})

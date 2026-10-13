@@ -212,3 +212,60 @@ async def test_get_actions_without_since_does_not_page(client, mock_trello):
     mock_trello.get(actions_url("b1"), payload=page, repeat=True)
     await client.get_actions("b1", None, ["createCard"])
     assert len(calls(mock_trello, "GET", f"{API}/boards/b1/actions")) == 1
+
+
+from .common import card_url, checklists_url  # noqa: E402
+
+
+async def test_board_labels_and_usernames(client, mock_trello):
+    mock_trello.get(BOARD_URL, payload=board())
+    result = await client.get_board("b1")
+    assert {i: (lb.name, lb.color) for i, lb in result.labels.items()} == {"lb1": ("Urgent", "red"), "lb2": ("", "green")}
+    assert result.member_usernames == {"m1": "sam", "m2": "alex"}
+    (req,) = calls(mock_trello, "GET", f"{API}/boards/b1")
+    assert req.kwargs["params"]["member_fields"] == "fullName,initials,username"
+
+
+async def test_error_status(client, mock_trello):
+    mock_trello.get(BOARD_URL, status=400, body="that label is already on the card")
+    with pytest.raises(TrelloError) as info:
+        await client.get_board("b1")
+    assert info.value.status == 400
+
+
+async def test_get_card(client, mock_trello):
+    mock_trello.get(card_url("c1"), payload={"id": "c1", "idBoard": "b1"})
+    assert (await client.get_card("c1"))["idBoard"] == "b1"
+    (req,) = calls(mock_trello, "GET", f"{API}/cards/c1")
+    assert req.kwargs["params"] == {"fields": "idBoard,idList,name,shortUrl,closed"}
+
+
+async def test_card_sub_resources(client, mock_trello):
+    mock_trello.post(f"{API}/cards/c1/actions/comments", payload={"id": "act1"})
+    mock_trello.post(f"{API}/cards/c1/idLabels", payload=[])
+    mock_trello.delete(f"{API}/cards/c1/idLabels/lb1", payload=[])
+    mock_trello.post(f"{API}/cards/c1/idMembers", payload=[])
+    mock_trello.delete(f"{API}/cards/c1/idMembers/m2", payload=[])
+    mock_trello.post(f"{API}/cards/c1/checklists", payload={"id": "cl1", "name": "Checklist"})
+    mock_trello.post(f"{API}/checklists/cl1/checkItems", payload={"id": "ci1"})
+    mock_trello.put(f"{API}/cards/c1/checkItem/ci1", payload={"id": "ci1"})
+    mock_trello.get(checklists_url("c1"), payload=[])
+    assert (await client.add_comment("c1", "On it 🚀"))["id"] == "act1"
+    await client.add_label("c1", "lb1")
+    await client.remove_label("c1", "lb1")
+    await client.add_member("c1", "m2")
+    await client.remove_member("c1", "m2")
+    assert (await client.create_checklist("c1", "Checklist"))["id"] == "cl1"
+    assert (await client.add_check_item("cl1", "Milk"))["id"] == "ci1"
+    await client.set_check_item("c1", "ci1", "complete")
+    assert await client.get_checklists("c1") == []
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/actions/comments") == [{"text": "On it 🚀"}]
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/idLabels") == [{"value": "lb1"}]
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/idMembers") == [{"value": "m2"}]
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/checklists") == [{"name": "Checklist"}]
+    assert bodies(mock_trello, "POST", f"{API}/checklists/cl1/checkItems") == [{"name": "Milk"}]
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1/checkItem/ci1") == [{"state": "complete"}]
+    assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idLabels/lb1")) == 1
+    assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idMembers/m2")) == 1
+    (req,) = calls(mock_trello, "GET", f"{API}/cards/c1/checklists")
+    assert req.kwargs["params"] == {"fields": "name", "checkItems": "all", "checkItem_fields": "name,state"}
