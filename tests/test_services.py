@@ -225,3 +225,60 @@ async def test_server_error_reason_code(hass, loaded, mock_trello):
         await _call(hass, "archive_card", {"card": "c1"})
     assert info.value.translation_key == "api_error"
     assert info.value.translation_placeholders == {"error": "connection"}
+
+
+async def test_add_comment(hass, loaded, mock_trello):
+    mock_trello.post(f"{API}/cards/c1/actions/comments", payload={"id": "act1"})
+    result = await _call(hass, "add_comment", {"entity_id": "todo.alex", "card_name": "Buy stamps", "text": "On it 🚀"}, response=True)
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/actions/comments") == [{"text": "On it 🚀"}]
+    assert result["comment_id"] == "act1"
+    assert result["card_id"] == "c1"
+    assert result["list_name"] == "Alex"
+
+
+@pytest.mark.parametrize("label", ["Urgent", "lb1"])
+async def test_add_label(hass, loaded, mock_trello, label):
+    mock_trello.post(f"{API}/cards/c1/idLabels", payload=[])
+    await _call(hass, "add_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": label})
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/idLabels") == [{"value": "lb1"}]
+
+
+async def test_add_label_already_present_is_success(hass, loaded, mock_trello):
+    """Review Focus 2."""
+    mock_trello.post(f"{API}/cards/c1/idLabels", status=400, body="that label is already on the card")
+    await _call(hass, "add_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": "Urgent"})
+
+
+async def test_remove_label(hass, loaded, mock_trello):
+    mock_trello.delete(f"{API}/cards/c1/idLabels/lb2", payload=[])
+    await _call(hass, "remove_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": "green"})
+    assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idLabels/lb2")) == 1
+
+
+async def test_unknown_label(hass, loaded):
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "add_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": "purple"})
+    assert info.value.translation_key == "label_not_found"
+
+
+async def test_assign_member_by_username(hass, loaded, mock_trello):
+    mock_trello.post(f"{API}/cards/c1/idMembers", payload=[])
+    await _call(hass, "assign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "alex"})
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/idMembers") == [{"value": "m2"}]
+
+
+async def test_remove_member_not_present_is_success(hass, loaded, mock_trello):
+    """Review Focus 2."""
+    mock_trello.delete(f"{API}/cards/c1/idMembers/m1", status=400, body="member is not on the card")
+    await _call(hass, "unassign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "Sam"})
+
+
+async def test_unassign_member_404_is_success(hass, loaded, mock_trello):
+    mock_trello.delete(f"{API}/cards/c1/idMembers/m1", status=404, body="not found")
+    await _call(hass, "unassign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "Sam"})
+
+
+async def test_add_member_server_error_still_fails(hass, loaded, mock_trello):
+    mock_trello.post(f"{API}/cards/c1/idMembers", status=500)
+    with pytest.raises(HomeAssistantError):
+        await _call(hass, "assign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "alex"})

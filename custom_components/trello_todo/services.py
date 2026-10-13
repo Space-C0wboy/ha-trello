@@ -357,6 +357,50 @@ async def _set_due(call: ServiceCall) -> Result:
     return _info(target.coordinator, raw), [target.coordinator]
 
 
+COMMENT_SCHEMA = _card_schema({vol.Required("text"): cv.string})
+
+
+@_handler
+async def _add_comment(call: ServiceCall) -> Result:
+    target = await _resolve_card(call.hass, call.data)
+    raw = await _api(
+        call.hass,
+        target.coordinator,
+        lambda client: client.add_comment(target.card_id, call.data["text"]),
+        card=target.card_id,
+    )
+    return _target_info(target, comment_id=(raw or {}).get("id")), [target.coordinator]
+
+
+LABEL_SCHEMA = _card_schema({vol.Required("label"): cv.string})
+MEMBER_SCHEMA = _card_schema({vol.Required("member"): cv.string})
+
+
+def _membership_handler(field: str, add: bool) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
+    """Labels and members. Already there (add) or already gone (remove) counts as success."""
+
+    @_handler
+    async def handle(call: ServiceCall) -> Result:
+        target = await _resolve_card(call.hass, call.data)
+        board = target.coordinator.data
+        if field == "label":
+            value_id = resolve_label(board, call.data["label"])
+            method = "add_label" if add else "remove_label"
+        else:
+            value_id = resolve_member(board, call.data["member"])
+            method = "add_member" if add else "remove_member"
+        await _api(
+            call.hass,
+            target.coordinator,
+            lambda client: getattr(client, method)(target.card_id, value_id),
+            card=target.card_id,
+            ok_statuses=(400,) if add else (400, 404),
+        )
+        return _target_info(target), [target.coordinator]
+
+    return handle
+
+
 # -- registration -------------------------------------------------------------------------------------
 SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], vol.Schema]] = {
     "create_card": (_create_card, CREATE_SCHEMA),
@@ -365,6 +409,11 @@ SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], v
     "archive_card": (_closed_handler(True), CARD_ONLY_SCHEMA),
     "restore_card": (_closed_handler(False), CARD_ONLY_SCHEMA),
     "set_due": (_set_due, SET_DUE_SCHEMA),
+    "add_comment": (_add_comment, COMMENT_SCHEMA),
+    "add_label": (_membership_handler("label", True), LABEL_SCHEMA),
+    "remove_label": (_membership_handler("label", False), LABEL_SCHEMA),
+    "assign_member": (_membership_handler("member", True), MEMBER_SCHEMA),
+    "unassign_member": (_membership_handler("member", False), MEMBER_SCHEMA),
 }
 
 
