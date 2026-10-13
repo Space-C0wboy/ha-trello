@@ -4,6 +4,20 @@
       "due_dates": {
         "default": "mdi:calendar-check"
       }
+    },
+    "sensor": {
+      "overdue": {
+        "default": "mdi:calendar-alert"
+      },
+      "due_today": {
+        "default": "mdi:calendar-today"
+      },
+      "due_soon": {
+        "default": "mdi:calendar-clock"
+      },
+      "next_due": {
+        "default": "mdi:calendar-arrow-right"
+      }
     }
   }
 }

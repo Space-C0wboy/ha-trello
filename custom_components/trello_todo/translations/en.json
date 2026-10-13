@@ -247,6 +247,58 @@
       "due_dates": {
         "name": "Due dates"
       }
+    },
+    "sensor": {
+      "overdue": {
+        "name": "Overdue",
+        "state_attributes": {
+          "by_member": {
+            "name": "By member"
+          },
+          "cards": {
+            "name": "Cards"
+          }
+        }
+      },
+      "due_today": {
+        "name": "Due today",
+        "state_attributes": {
+          "by_member": {
+            "name": "By member"
+          },
+          "cards": {
+            "name": "Cards"
+          }
+        }
+      },
+      "due_soon": {
+        "name": "Due soon",
+        "state_attributes": {
+          "by_member": {
+            "name": "By member"
+          },
+          "cards": {
+            "name": "Cards"
+          }
+        }
+      },
+      "next_due": {
+        "name": "Next due",
+        "state_attributes": {
+          "card": {
+            "name": "Card"
+          },
+          "list": {
+            "name": "List"
+          },
+          "members": {
+            "name": "Members"
+          },
+          "url": {
+            "name": "URL"
+          }
+        }
+      }
     }
   },
   "services": {

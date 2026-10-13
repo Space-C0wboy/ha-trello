@@ -30,6 +30,10 @@ DEFAULT_RATE_LIMIT_BACKOFF: Final = 60
 # The `items` attribute is capped so state objects stay small on the Pi.
 MAX_ITEMS_ATTRIBUTE: Final = 25
 
+# Due-date sensors: the `cards` attribute cap, and how far ahead "due soon" looks.
+MAX_CARDS_ATTRIBUTE: Final = 20
+DUE_SOON_DAYS: Final = 7
+
 MODE_WEBHOOK: Final = "webhook"
 MODE_FEED: Final = "feed"
 CONF_WEBHOOKS: Final = "webhooks"
