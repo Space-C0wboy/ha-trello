@@ -38,7 +38,8 @@
       "oauth_error": "Trello returned an invalid token response.",
       "oauth_timeout": "Timed out getting a token from Atlassian.",
       "oauth_unauthorized": "Atlassian rejected the client ID or secret.",
-      "oauth_failed": "Getting a token from Atlassian failed."
+      "oauth_failed": "Getting a token from Atlassian failed.",
+      "oauth_implementation_unavailable": "The Trello application credentials are unavailable. Check them under Application credentials."
     },
     "create_entry": {
       "default": "Signed in to Trello."
@@ -84,6 +85,7 @@
       },
       "abort": {
         "no_more_boards": "Every open board on this account is already added.",
+        "already_configured": "This board is already added.",
         "entry_not_loaded": "The Trello account isn't loaded right now. Fix it (for example by signing in again), then try again.",
         "cannot_connect": "Could not reach Trello.",
         "reconfigure_successful": "Board settings saved."

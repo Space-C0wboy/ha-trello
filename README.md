@@ -101,7 +101,7 @@ Each board decides what checking an item off does:
 | **Archive** | Archived where it is |
 | **Move and archive** | Both, in one change |
 
-- **Default:** a list whose name contains "done" (for example "Done & Archive") is picked as the done list, with **Move**. A board with no such list defaults to **Archive**.
+- **Default:** a list whose name starts with "done" (for example "Done & Archive" or "✅ Done", but not "To be done") is picked as the done list, with **Move**. A board with no such list defaults to **Archive**.
 - **Change a board's settings:** open the Trello integration, find the board, and choose **Change done settings**.
 - **Add a board:** **+ Add board** on the Trello integration.
 - **Remove a board:** delete it there. That removes its device and lists.

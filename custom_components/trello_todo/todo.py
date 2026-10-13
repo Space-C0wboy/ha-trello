@@ -298,6 +298,8 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
 
     async def async_move_todo_item(self, uid: str, previous_uid: str | None = None) -> None:
         card = self._card(uid)
+        if previous_uid == uid:
+            return  # "move after itself" leaves the card where it is
         others = [c for c in self._cards() if c.id != uid]
         if previous_uid is None:
             pos = others[0].pos / 2 if others else POS_STEP

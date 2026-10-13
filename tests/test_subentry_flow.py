@@ -1,6 +1,7 @@
 """Tests for adding, reconfiguring and removing board sub-entries."""
 from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 
 from .common import (
     BOARDS,
@@ -93,6 +94,10 @@ async def test_remove_board(hass, load_entry):
     await hass.async_block_till_done()
     assert entry.state is ConfigEntryState.LOADED
     assert [c.board_id for c in entry.runtime_data.boards.values()] == ["b1"]
+    assert er.async_get(hass).async_get_entity_id("todo", "trello_todo", "l_venues") is None
+    assert hass.states.get("todo.venues") is None
+    devices = dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)
+    assert [d.name for d in devices] == ["Household"]
 
 
 async def test_board_on_other_account_not_offered(hass, loaded, mock_trello):

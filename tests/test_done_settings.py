@@ -30,3 +30,21 @@ def test_default_takes_first_done_list_by_position():
 )
 def test_done_settings_from_input(user_input, expected):
     assert done_settings_from_input(user_input) == expected
+
+
+@pytest.mark.parametrize(
+    ("name", "picked"),
+    [
+        ("Done & Archive", True),
+        ("Done", True),
+        ("✅ Done", True),
+        ("done-ish", True),
+        ("To be done", False),
+        ("Undone", False),
+        ("Not done", False),
+        ("Abandoned", False),
+    ],
+)
+def test_done_list_must_start_with_done(name, picked):
+    lists = [{"id": "x", "name": name, "pos": 1}]
+    assert (default_done_settings(lists)["done_list"] == "x") is picked

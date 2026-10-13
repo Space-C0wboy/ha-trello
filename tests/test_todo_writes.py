@@ -227,3 +227,8 @@ async def test_write_when_token_endpoint_down(hass, loaded, mock_trello):
     with pytest.raises(HomeAssistantError) as info:
         await _service(hass, "update_item", {"item": "c1", "status": "completed"})
     assert info.value.translation_key == "api_error"
+
+
+async def test_move_after_itself_is_a_no_op(hass, loaded, mock_trello, hass_ws_client):
+    await _move(hass, hass_ws_client, "c2", "c2")
+    assert calls(mock_trello, "PUT", f"{API}/cards/c2") == []

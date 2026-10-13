@@ -6,11 +6,11 @@ from typing import Any
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import config_entry_oauth2_flow
+from homeassistant.helpers import config_entry_oauth2_flow, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TrelloAccessError, TrelloClient
-from .const import SUBENTRY_BOARD
+from .const import CONF_BOARD_ID, DOMAIN, SUBENTRY_BOARD
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry, TrelloRuntimeData
 
 PLATFORMS: list[Platform] = [Platform.TODO]
@@ -31,6 +31,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
 
     client = TrelloClient(async_get_clientsession(hass), get_token)
     settings = _board_settings(entry)
+    _delete_stale_issues(hass, {data[CONF_BOARD_ID] for data in settings.values()})
     boards = {sid: TrelloBoardCoordinator(hass, entry, client, entry.subentries[sid]) for sid in settings}
 
     # Boards load independently: one unreachable board must not keep the others down.
@@ -49,6 +50,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
+
+
+def _delete_stale_issues(hass: HomeAssistant, board_ids: set[str]) -> None:
+    """Drop "board inaccessible" repairs for boards that are no longer set up."""
+    prefix = "board_inaccessible_"
+    for domain, issue_id in list(ir.async_get(hass).issues):
+        if domain == DOMAIN and issue_id.startswith(prefix) and issue_id.removeprefix(prefix) not in board_ids:
+            ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
 async def _async_update_listener(hass: HomeAssistant, entry: TrelloConfigEntry) -> None:

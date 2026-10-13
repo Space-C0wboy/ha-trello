@@ -1,10 +1,12 @@
 """Board sub-entries: add a board, or change what "done" does on it."""
 from __future__ import annotations
 
+import re
 from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
+from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntryState, ConfigSubentryFlow, SubentryFlowResult
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
@@ -28,6 +30,9 @@ from .const import (
 )
 
 
+_DONE_NAME = re.compile(r"^\W*done\b", re.IGNORECASE)
+
+
 def configured_board_ids(hass: HomeAssistant) -> set[str]:
     """Boards already set up under any Trello account: a board belongs to one entry only."""
     return {
@@ -39,9 +44,12 @@ def configured_board_ids(hass: HomeAssistant) -> set[str]:
 
 
 def default_done_settings(lists: list[dict[str, Any]]) -> dict[str, Any]:
-    """Pre-pick the first list (by position) with "done" in its name; with none, archive."""
+    """Pre-pick the first list (by position) whose name starts with "done"; with none, archive.
+
+    Leading emoji/punctuation are ignored ("✅ Done"), but "To be done" or "Undone" don't count.
+    """
     ordered = sorted(lists, key=lambda lst: lst.get("pos", 0))
-    done_list = next((lst["id"] for lst in ordered if "done" in lst["name"].lower()), None)
+    done_list = next((lst["id"] for lst in ordered if _DONE_NAME.match(lst["name"])), None)
     return {CONF_DONE_BEHAVIOR: DONE_MOVE if done_list else DONE_ARCHIVE, CONF_DONE_LIST: done_list}
 
 
@@ -88,7 +96,7 @@ class BoardSubentryFlow(ConfigSubentryFlow):
         if not self._available:
             try:
                 boards = await self._client().get_boards()
-            except (TrelloError, HomeAssistantError):
+            except (TrelloError, HomeAssistantError, ClientError):
                 return self.async_abort(reason="cannot_connect")
             configured = configured_board_ids(self.hass)
             self._available = {b["id"]: b["name"] for b in boards if b["id"] not in configured}
@@ -98,7 +106,7 @@ class BoardSubentryFlow(ConfigSubentryFlow):
             self._board_id = user_input["board"]
             try:
                 self._lists = await self._client().get_lists(self._board_id)
-            except (TrelloError, HomeAssistantError):
+            except (TrelloError, HomeAssistantError, ClientError):
                 return self.async_abort(reason="cannot_connect")
             return await self.async_step_done()
         options = [SelectOptionDict(value=bid, label=name) for bid, name in self._available.items()]
@@ -138,7 +146,7 @@ class BoardSubentryFlow(ConfigSubentryFlow):
         if not self._lists:
             try:
                 self._lists = await self._client().get_lists(subentry.data[CONF_BOARD_ID])
-            except (TrelloError, HomeAssistantError):
+            except (TrelloError, HomeAssistantError, ClientError):
                 return self.async_abort(reason="cannot_connect")
         return self.async_show_form(
             step_id="reconfigure",

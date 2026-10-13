@@ -166,3 +166,30 @@ async def test_only_board_inaccessible_still_loads(hass, entry, mock_trello):
     assert await _setup(hass, entry)
     assert entry.state is ConfigEntryState.LOADED
     assert ir.async_get(hass).async_get_issue(DOMAIN, "board_inaccessible_b1") is not None
+
+
+async def test_repair_cleared_when_board_removed(hass, setup_credentials, mock_trello):
+    entry = make_entry(hass, board_subentry(), SECOND)
+    mock_trello.get(BOARD_URL, payload=board(), repeat=True)
+    mock_trello.get(B2_URL, status=404, body="board not found", repeat=True)
+    assert await _setup(hass, entry)
+    assert ir.async_get(hass).async_get_issue(DOMAIN, "board_inaccessible_b2") is not None
+    hass.config_entries.async_remove_subentry(entry, subentry_id(entry, "b2"))
+    await hass.async_block_till_done()
+    assert ir.async_get(hass).async_get_issue(DOMAIN, "board_inaccessible_b2") is None
+
+
+async def test_board_rename_propagates(hass, loaded, mock_trello):
+    from homeassistant.helpers import device_registry as dr
+
+    runtime = loaded.runtime_data
+    sid = subentry_id(loaded, "b1")
+    mock_trello.clear()
+    mock_trello.get(BOARD_URL, payload=board(name="Our Home"), repeat=True)
+    await runtime.boards[sid].async_refresh()
+    await hass.async_block_till_done()
+    assert loaded.runtime_data is runtime  # a rename must not reload
+    assert runtime.boards[sid].board_title == "Our Home"
+    assert loaded.subentries[sid].title == "Our Home"
+    (device,) = dr.async_entries_for_config_entry(dr.async_get(hass), loaded.entry_id)
+    assert device.name == "Our Home"

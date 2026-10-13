@@ -10,7 +10,7 @@ from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed
-from homeassistant.helpers import issue_registry as ir
+from homeassistant.helpers import device_registry as dr, issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
@@ -59,6 +59,7 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
             update_interval=timedelta(seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
         )
         self.client = client
+        self.subentry_id = subentry.subentry_id
         self.board_id: str = subentry.data[CONF_BOARD_ID]
         self.board_title: str = subentry.title
         self.done_behavior: str = subentry.data[CONF_DONE_BEHAVIOR]
@@ -91,4 +92,17 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
         except TrelloError as err:
             raise UpdateFailed(str(err)) from err
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
+        if board.name and board.name != self.board_title:
+            self._rename(board.name)
         return board
+
+    def _rename(self, name: str) -> None:
+        """Follow a board rename in Trello: sub-entry title, device name, messages. Titles don't trigger a reload."""
+        self.board_title = name
+        entry = self.config_entry
+        if subentry := entry.subentries.get(self.subentry_id):
+            self.hass.config_entries.async_update_subentry(entry, subentry, title=name)
+        registry = dr.async_get(self.hass)
+        for device in dr.async_entries_for_config_entry(registry, entry.entry_id):
+            if (DOMAIN, self.board_id) in device.identifiers:
+                registry.async_update_device(device.id, name=name)
