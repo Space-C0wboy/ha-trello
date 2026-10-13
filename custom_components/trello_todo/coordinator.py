@@ -3,16 +3,18 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
 from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryAuthFailed
+from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .activity import ACTION_TYPES, ActionContext, ActivityProcessor
 from .api import (
     TrelloAccessError,
     TrelloAuthError,
@@ -29,6 +31,10 @@ from .const import (
     DEFAULT_RATE_LIMIT_BACKOFF,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    FEED_INTERVAL_SECONDS,
+    MODE_FEED,
+    MODE_WEBHOOK,
+    WEBHOOK_REFRESH_MINUTES,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -65,6 +71,55 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
         self.done_behavior: str = subentry.data[CONF_DONE_BEHAVIOR]
         self.done_list: str | None = subentry.data.get(CONF_DONE_LIST)
         self._issue_id = f"board_inaccessible_{self.board_id}"
+        self._scan_interval = timedelta(seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+        self.mode = MODE_FEED
+        self.processor = ActivityProcessor(self._activity_context, self.async_request_refresh)
+        self._feed_unsub: CALLBACK_TYPE | None = None
+
+    def _activity_context(self) -> ActionContext:
+        board = self.data
+        return ActionContext(
+            me=self.config_entry.unique_id,
+            done_list=self.done_list,
+            members=dict(board.members) if board else {},
+        )
+
+    async def async_poll_feed(self, _now: datetime | None = None) -> None:
+        """Fetch new board activity: feed mode every minute, and once at startup for the baseline."""
+        try:
+            actions = await self.client.get_actions(self.board_id, self.processor.newest_id, ACTION_TYPES)
+        except (TrelloError, ClientError, HomeAssistantError) as err:
+            _LOGGER.debug("Trello activity feed for %s failed: %s", self.board_title, err)
+            return
+        if not self.processor.baselined:
+            self.processor.set_baseline(actions)
+        else:
+            await self.processor.async_process(actions)
+
+    @callback
+    def set_mode(self, mode: str) -> None:
+        """webhook: Trello pushes activity, refresh is a 15-min safety net. feed: poll activity every minute."""
+        self.mode = mode
+        if mode == MODE_WEBHOOK:
+            self.update_interval = timedelta(minutes=WEBHOOK_REFRESH_MINUTES)
+            self.async_stop_feed()
+        else:
+            self.update_interval = self._scan_interval
+            if self._feed_unsub is None:
+                self._feed_unsub = async_track_time_interval(
+                    self.hass,
+                    self.async_poll_feed,
+                    timedelta(seconds=FEED_INTERVAL_SECONDS),
+                    name=f"trello activity feed {self.board_title}",
+                    cancel_on_shutdown=True,
+                )
+        self.async_update_listeners()
+
+    @callback
+    def async_stop_feed(self) -> None:
+        if self._feed_unsub is not None:
+            self._feed_unsub()
+            self._feed_unsub = None
 
     async def _async_update_data(self) -> TrelloBoard:
         try:

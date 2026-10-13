@@ -10,7 +10,7 @@ from homeassistant.helpers import config_entry_oauth2_flow, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import TrelloAccessError, TrelloClient
-from .const import CONF_BOARD_ID, DOMAIN, SUBENTRY_BOARD
+from .const import CONF_BOARD_ID, DOMAIN, MODE_FEED, SUBENTRY_BOARD
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry, TrelloRuntimeData
 
 PLATFORMS: list[Platform] = [Platform.TODO]
@@ -47,7 +47,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
     entry.runtime_data = TrelloRuntimeData(
         client=client, boards=boards, board_settings=settings, options=dict(entry.options)
     )
+    for coordinator in boards.values():
+        # Baseline: anything that happened before this start is not replayed as events.
+        await coordinator.async_poll_feed()
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
+    for coordinator in boards.values():
+        entry.async_on_unload(coordinator.async_stop_feed)
+        coordinator.set_mode(MODE_FEED)  # Task 6: the WebhookManager decides per board
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     return True
 

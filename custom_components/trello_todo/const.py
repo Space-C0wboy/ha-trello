@@ -29,3 +29,9 @@ DEFAULT_RATE_LIMIT_BACKOFF: Final = 60
 
 # The `items` attribute is capped so state objects stay small on the Pi.
 MAX_ITEMS_ATTRIBUTE: Final = 25
+
+MODE_WEBHOOK: Final = "webhook"
+MODE_FEED: Final = "feed"
+CONF_WEBHOOKS: Final = "webhooks"
+FEED_INTERVAL_SECONDS: Final = 60
+WEBHOOK_REFRESH_MINUTES: Final = 15

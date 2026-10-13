@@ -12,7 +12,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.trello_todo.const import DOMAIN
 
-from .common import BOARD_URL, CLIENT_ID, CLIENT_SECRET, board, board_url, make_entry, second_board
+from .common import BOARD_URL, CLIENT_ID, CLIENT_SECRET, actions_url, board, board_url, make_entry, second_board
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +62,8 @@ def load_entry(hass, setup_credentials, mock_trello):
         entry = make_entry(hass, *subentries, expires_at=expires_at)
         mock_trello.get(BOARD_URL, payload=board() if b1 is None else b1, repeat=True)
         mock_trello.get(board_url("b2"), payload=second_board() if b2 is None else b2, repeat=True)
+        mock_trello.get(actions_url("b1"), payload=[], repeat=True)
+        mock_trello.get(actions_url("b2"), payload=[], repeat=True)
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
         return entry
