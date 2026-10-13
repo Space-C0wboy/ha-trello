@@ -1,0 +1,17 @@
+{
+  "domain": "trello_todo",
+  "name": "Trello",
+  "codeowners": [
+    "@Space-C0wboy"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "application_credentials"
+  ],
+  "documentation": "https://github.com/Space-C0wboy/ha-trello",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/Space-C0wboy/ha-trello/issues",
+  "requirements": [],
+  "version": "0.2.0"
+}
