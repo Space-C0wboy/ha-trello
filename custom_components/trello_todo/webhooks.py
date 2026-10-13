@@ -355,7 +355,9 @@ class WebhookManager:
         callback_url = self._states().get(board_id or "", {}).get("callback_url")
         if board_id is None or coordinator is None or not callback_url:
             return web.Response(status=HTTPStatus.GONE)
-        body = await request.read()
+        # text(), not read(): Nabu Casa delivers cloudhooks as a MockRequest without read(). Trello sends UTF-8,
+        # so re-encoding gives back the exact bytes it signed.
+        body = (await request.text()).encode("utf-8")
         expected = signature(self._secret, body, callback_url)
         if not self._secret or not hmac.compare_digest(request.headers.get("X-Trello-Webhook", ""), expected):
             self.bad_signatures += 1

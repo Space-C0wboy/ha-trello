@@ -438,3 +438,21 @@ async def test_webhook_api_401_starts_reauth(hass, setup_credentials, mock_trell
     mock_trello.post(CREATE_URL, status=401, body="invalid token", repeat=True)
     await _setup(hass, entry, mock_trello)
     assert [f["context"]["source"] for f in hass.config_entries.flow.async_progress()] == ["reauth"]
+
+
+async def test_cloudhook_delivery_mock_request(hass, webhook_entry):
+    """Nabu Casa delivers cloudhooks as HA's MockRequest (no .read()); non-ASCII bodies must verify too."""
+    from homeassistant.util.aiohttp import MockRequest
+
+    body = json.dumps(
+        {"action": action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="On it 🚀")}, ensure_ascii=False
+    ).encode("utf-8")
+    state = webhook_entry.data["webhooks"]["b1"]
+    sig = signature(CLIENT_SECRET, body, state["callback_url"])
+    request = MockRequest(content=body, mock_source="cloudhook", method="POST", headers={"X-Trello-Webhook": sig})
+    response = await webhook_entry.runtime_data.webhooks._async_handle(hass, state["webhook_id"], request)
+    assert response.status == 200
+    await hass.async_block_till_done()
+    attrs = hass.states.get("event.household_activity").attributes
+    assert attrs["event_type"] == "comment_added"
+    assert attrs["comment"] == "On it 🚀"
