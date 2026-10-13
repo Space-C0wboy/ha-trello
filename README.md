@@ -228,6 +228,8 @@ Automations and scripts can change Trello with these actions. You'll find them u
 
 **Safe to repeat.** Adding a label or member that's already on the card, or removing one that isn't, counts as success.
 
+**Chaining actions.** To act again on a card you just created or moved, pass `card: "{{ result.card_id }}"` from the earlier step's response rather than looking it up by `card_name`.
+
 **Results.** Add `response_variable` to use the card's details in later steps: `card_id`, `card_url`, `card_name`, `list_name` and `board_name`. `add_comment` also returns `comment_id`.
 
 ### Example: comment when a card reaches the done list

@@ -116,6 +116,10 @@ async def _resolve_card(hass: HomeAssistant, data: dict[str, Any]) -> CardTarget
                 raw = await coordinator.client.get_card(ref)
             except TrelloAccessError:
                 continue
+            except TrelloError as err:
+                if err.status == 400:  # Trello's "invalid id": a typo, not an outage
+                    continue
+                _raise_api(hass, coordinator, err)
             except (TrelloError, ClientError, HomeAssistantError) as err:
                 _raise_api(hass, coordinator, err)
             target = boards.get(raw.get("idBoard", ""))
@@ -126,7 +130,14 @@ async def _resolve_card(hass: HomeAssistant, data: dict[str, Any]) -> CardTarget
             )
         raise ResolveError("card_not_found", card=data["card"])
     coordinator, list_id = _todo_list(hass, data["entity_id"])
-    card = find_card_in_list(coordinator.data.cards.get(list_id, []), data["card_name"])
+    try:
+        card = find_card_in_list(coordinator.data.cards.get(list_id, []), data["card_name"])
+    except ResolveError as err:
+        if err.key != "card_not_found":
+            raise
+        # A card created or moved moments ago may not be cached yet (refreshes are debounced): look once more.
+        await coordinator.async_refresh()
+        card = find_card_in_list(_with_data(coordinator).data.cards.get(list_id, []), data["card_name"])
     return CardTarget(coordinator, card.id, card.list_id, card.name, card.url)
 
 

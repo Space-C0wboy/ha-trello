@@ -5,7 +5,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.trello_todo.const import DOMAIN
 
-from .common import API, LISTS_B2, board, board_subentry, bodies, calls, card, card_url, checklists_url
+from .common import API, BOARD_URL, LISTS_B2, board, board_subentry, bodies, calls, card, card_url, checklists_url
 
 INFO = {
     "card_id": "c1",
@@ -344,3 +344,21 @@ async def test_set_checklist_item_missing(hass, loaded, mock_trello, data, key):
     with pytest.raises(ServiceValidationError) as info:
         await _call(hass, "set_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "checked": True, **data})
     assert info.value.translation_key == key
+
+
+async def test_malformed_card_reference_is_card_not_found(hass, loaded, mock_trello):
+    """Final review I1: Trello answers 400 "invalid id" for a malformed id, which is still "card not found"."""
+    mock_trello.get(card_url("buy-stamps"), status=400, body="invalid id")
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "archive_card", {"card": "buy-stamps"})
+    assert info.value.translation_key == "card_not_found"
+
+
+async def test_card_name_found_after_fresh_refresh(hass, loaded, mock_trello):
+    """Final review I2: a card created moments ago isn't in the cache yet; look again after a forced refresh."""
+    mock_trello.clear()
+    fresh = board(cards=[*[c for c in board()["cards"]], card("new", "Just created", "l_alex", 99)])
+    mock_trello.get(BOARD_URL, payload=fresh, repeat=True)
+    mock_trello.post(f"{API}/cards/new/actions/comments", payload={"id": "act9"})
+    await _call(hass, "add_comment", {"entity_id": "todo.alex", "card_name": "Just created", "text": "hi"})
+    assert bodies(mock_trello, "POST", f"{API}/cards/new/actions/comments") == [{"text": "hi"}]
