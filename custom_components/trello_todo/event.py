@@ -10,6 +10,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .activity import EVENT_TYPES
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry
+from .entity import add_when_loaded
 
 PARALLEL_UPDATES = 0
 
@@ -18,38 +19,7 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: TrelloConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
     for subentry_id, coordinator in entry.runtime_data.boards.items():
-        _add_when_loaded(entry, subentry_id, coordinator, async_add_entities)
-
-
-def _add_when_loaded(
-    entry: TrelloConfigEntry,
-    subentry_id: str,
-    coordinator: TrelloBoardCoordinator,
-    async_add_entities: AddConfigEntryEntitiesCallback,
-) -> None:
-    """The entity needs the board's data (device name); a board that was down at startup gets it later."""
-    if coordinator.data is not None:
-        async_add_entities([TrelloActivityEvent(coordinator)], config_subentry_id=subentry_id)
-        return
-    remove = None
-
-    @callback
-    def _first_data() -> None:
-        nonlocal remove
-        if coordinator.data is None or remove is None:
-            return
-        remove()
-        remove = None
-        async_add_entities([TrelloActivityEvent(coordinator)], config_subentry_id=subentry_id)
-
-    remove = coordinator.async_add_listener(_first_data)
-
-    @callback
-    def _cleanup() -> None:
-        if remove is not None:
-            remove()
-
-    entry.async_on_unload(_cleanup)
+        add_when_loaded(entry, subentry_id, coordinator, async_add_entities, lambda c: [TrelloActivityEvent(c)])
 
 
 class TrelloActivityEvent(CoordinatorEntity[TrelloBoardCoordinator], EventEntity):

@@ -1,13 +1,10 @@
 """One to-do entity per open Trello list, added and removed as the board changes."""
 from __future__ import annotations
 
-import logging
 from collections.abc import Awaitable, Callable
-from dataclasses import replace
 from datetime import date, datetime, time
 from typing import Any
 
-from aiohttp import ClientError
 from homeassistant.components.todo import (
     TodoItem,
     TodoItemStatus,
@@ -15,21 +12,16 @@ from homeassistant.components.todo import (
     TodoListEntityFeature,
 )
 from homeassistant.core import HomeAssistant, callback
-from homeassistant.exceptions import (
-    ConfigEntryAuthFailed,
-    HomeAssistantError,
-    ServiceValidationError,
-)
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util, slugify
 
-from .api import TrelloAuthError, TrelloBoard, TrelloCard, TrelloClient, TrelloError, parse_card
+from .api import TrelloBoard, TrelloCard, TrelloClient, parse_card
 from .const import DOMAIN, DONE_ARCHIVE, DONE_MOVE, DONE_MOVE_AND_ARCHIVE, MAX_ITEMS_ATTRIBUTE
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry
-
-_LOGGER = logging.getLogger(__name__)
+from .writes import apply_card_fields, async_card_write
 
 PARALLEL_UPDATES = 1
 
@@ -126,33 +118,6 @@ def _due_iso(due: str | None) -> str | None:
     return dt_util.as_utc(parsed).isoformat()
 
 
-def _apply_card_fields(board: TrelloBoard, card: TrelloCard, fields: dict[str, Any]) -> None:
-    """Mirror a successful card update in the cached board until the next refresh."""
-    for cards in board.cards.values():
-        cards[:] = [c for c in cards if c.id != card.id]
-    if fields.get("closed"):
-        return
-    list_id = fields.get("idList", card.list_id)
-    target = board.cards.setdefault(list_id, [])
-    positions = [c.pos for c in target]
-    pos = fields.get("pos", card.pos)
-    if pos == "top":
-        pos = (min(positions) - 1) if positions else 0.0
-    elif pos == "bottom":
-        pos = (max(positions) + 1) if positions else 0.0
-    target.append(
-        replace(
-            card,
-            name=fields.get("name", card.name),
-            desc=fields.get("desc", card.desc),
-            due=fields.get("due", card.due),
-            list_id=list_id,
-            pos=float(pos),
-        )
-    )
-    target.sort(key=lambda c: c.pos)
-
-
 class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
     """A Trello list as a to-do list. Cards in the board's done list show as completed."""
 
@@ -245,27 +210,7 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
         local: Callable[[TrelloBoard, Any], None] | None = None,
     ) -> None:
         """Run an API write, map its errors, mirror it locally, then refresh this board."""
-        try:
-            result = await write(self.coordinator.client)
-            if local is not None and (board := self.coordinator.data) is not None:
-                try:
-                    local(board, result)
-                except (KeyError, TypeError, ValueError) as err:  # the refresh below corrects the board anyway
-                    _LOGGER.debug("Could not mirror a Trello write locally: %s", err)
-                else:
-                    self.coordinator.async_set_updated_data(board)
-        except ConfigEntryAuthFailed as err:
-            # OAuth2TokenRequestReauthError: OAuth2Session has already started reauth.
-            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="auth_failed") from err
-        except TrelloAuthError as err:
-            self.coordinator.config_entry.async_start_reauth(self.hass)
-            raise HomeAssistantError(translation_domain=DOMAIN, translation_key="auth_failed") from err
-        except (TrelloError, ClientError) as err:  # ClientError: a failed token refresh
-            raise HomeAssistantError(
-                translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": str(err)}
-            ) from err
-        finally:
-            await self.coordinator.async_request_refresh()
+        await async_card_write(self.coordinator, write, local)
 
     def _changed_fields(self, card: TrelloCard, item: TodoItem) -> dict[str, Any]:
         fields: dict[str, Any] = {}
@@ -327,7 +272,7 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
 
             await self._write(
                 reopen,
-                lambda board, target: _apply_card_fields(board, card, {**fields, "idList": target, "pos": "top"}),
+                lambda board, target: apply_card_fields(board, card, {**fields, "idList": target, "pos": "top"}),
             )
             return
         if not self.is_done_list and item.status == TodoItemStatus.COMPLETED:
@@ -335,7 +280,7 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
         if fields:
             await self._write(
                 lambda client: client.update_card(card.id, fields),
-                lambda board, _: _apply_card_fields(board, card, fields),
+                lambda board, _: apply_card_fields(board, card, fields),
             )
 
     async def async_delete_todo_items(self, uids: list[str]) -> None:
@@ -346,7 +291,7 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
             for card in cards:
                 await client.update_card(card.id, {"closed": True})
 
-        await self._write(archive, lambda board, _: [_apply_card_fields(board, c, {"closed": True}) for c in cards])
+        await self._write(archive, lambda board, _: [apply_card_fields(board, c, {"closed": True}) for c in cards])
 
     async def async_move_todo_item(self, uid: str, previous_uid: str | None = None) -> None:
         card = self._card(uid)
@@ -361,5 +306,5 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
             pos = (prev.pos + others[index + 1].pos) / 2 if index + 1 < len(others) else prev.pos + POS_STEP
         await self._write(
             lambda client: client.update_card(card.id, {"pos": pos}),
-            lambda board, _: _apply_card_fields(board, card, {"pos": pos}),
+            lambda board, _: apply_card_fields(board, card, {"pos": pos}),
         )
