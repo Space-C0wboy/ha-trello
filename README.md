@@ -18,6 +18,8 @@ A [HACS](https://hacs.xyz/) custom integration for [Trello](https://trello.com/)
 - **Safe deletes:** deleting an item archives the card. Nothing is ever hard-deleted.
 - **Actions for automations:** create, move, copy, archive, comment, label, assign, checklists and due dates, using names rather than ids.
 - **Trello events for automations:** comments, moves, due dates, assignments and more fire events on an `event` entity per board — within seconds with Nabu Casa or a public HTTPS URL, within a minute otherwise.
+- **Due-date calendar:** each board's due dates in Home Assistant's Calendar panel. Drag an event to change the due date, or delete it to clear the due date.
+- **Due-date sensors:** overdue, due today, due soon and next due for each board, with a per-person breakdown.
 - **Dashboard-friendly attributes:** card names, due dates, labels and members are available in state attributes.
 - **No extra dependencies:** uses only `aiohttp`, which is already bundled with Home Assistant.
 
@@ -25,13 +27,16 @@ A [HACS](https://hacs.xyz/) custom integration for [Trello](https://trello.com/)
 
 ## Entities
 
-Each board is a device. Each open list on the board is a `todo` entity, and each board has one `event` entity.
+Each board is a device. Each open list on the board is a `todo` entity. Each board also has an `event` entity, a `calendar` entity and four `sensor` entities.
 
 | Entity | Entity ID | State | Description |
 |--------|-----------|-------|-------------|
 | One per open list | `todo.<list name>` | Number of open items | Its cards, as to-do items in list order |
 | The board's done list | `todo.<done list name>` | `0` | Its cards, shown as completed items |
 | Board activity | `event.<board name>_activity` | Time of the last event | Fires an event for each Trello activity (see Events) |
+| Due dates | `calendar.<board name>_due_dates` | On while a card's event is in progress | Cards with a due date, as events (see Calendar) |
+| Overdue / Due today / Due soon | `sensor.<board name>_overdue`, `_due_today`, `_due_soon` | Number of open cards | Past due, due before midnight, due within 7 days (see Sensors) |
+| Next due | `sensor.<board name>_next_due` | Timestamp | The next open card's due time |
 
 If two boards have a list with the same name, the second one gets `_2`.
 
@@ -197,6 +202,71 @@ actions:
 A card was assigned to me: use `event_type` `member_added` with `for_me` `true`.
 
 A card landed in the done list: use `event_type` `card_moved` with `to_done_list` `true`.
+
+---
+
+## Calendar
+
+Each board has a calendar, `calendar.<board name>_due_dates` (for example `calendar.household_due_dates`). It shows up in Home Assistant's **Calendar** panel next to your other calendars.
+
+- **One event per card with a due date.** The event ends at the due time. If the card has a start date, the event runs from the start date to the due time; otherwise it is 30 minutes long.
+- **Completed cards stay on the calendar** with a ✓ in front of the name. A card is complete when its due date is ticked complete in Trello, or when it is in the board's done list.
+- **The description** holds the card description, the list name and a link to the card.
+
+Editing from the Calendar panel:
+
+| You do | Trello gets |
+|--------|-------------|
+| Drag or resize an event | The new due date (and start date, if the event is longer than 30 minutes) |
+| Delete an event | The due date and start date are removed. The card stays. |
+
+New events can't be created here (a card needs a list: use `todo.add_item` or `trello_todo.create_card`). All-day events aren't supported. Renaming an event doesn't rename the card.
+
+### Example: a reminder an hour before a card is due
+
+```yaml
+triggers:
+  - trigger: calendar
+    event: start
+    entity_id: calendar.household_due_dates
+    offset: "-0:30:00"
+conditions:
+  - condition: template
+    value_template: "{{ not trigger.calendar_event.summary.startswith('✓') }}"
+actions:
+  - action: notify.notify
+    data:
+      message: "Due in an hour: {{ trigger.calendar_event.summary }}"
+```
+
+The event starts 30 minutes before the due time, so an offset of `-0:30:00` fires one hour before the card is due.
+
+---
+
+## Sensors
+
+Each board has four due-date sensors. They count **open** cards: cards with a due date that aren't ticked complete and aren't in the done list.
+
+| Sensor | State | Counts |
+|--------|-------|--------|
+| `sensor.<board name>_overdue` | Number of cards | The due time has passed |
+| `sensor.<board name>_due_today` | Number of cards | Due later today (before local midnight) |
+| `sensor.<board name>_due_soon` | Number of cards | Due after today, within the next 7 days |
+| `sensor.<board name>_next_due` | Timestamp | The next open card's due time (`unknown` if none) |
+
+Each card is counted by at most one sensor. The sensors update within a minute as time passes, so a card becomes overdue on its own.
+
+| Attribute | On | Description |
+|-----------|----|-------------|
+| `by_member` | The three counts | Counts per person, e.g. `{"Alex": 1, "Sam": 2}`. A card with two people counts for both; cards with nobody count as `Unassigned`. |
+| `cards` | The three counts | Up to 20 cards, soonest first: `{name, due, list, members}`. Not recorded in history. |
+| `card`, `list`, `members`, `url` | Next due | The card that is due next |
+
+How many cards are due today for Sam:
+
+```yaml
+{{ state_attr('sensor.household_due_today', 'by_member').get('Sam', 0) }}
+```
 
 ---
 
