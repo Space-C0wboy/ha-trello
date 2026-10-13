@@ -1,7 +1,7 @@
 """Minimal typed async client for the Trello REST API (no Home Assistant imports)."""
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -35,6 +35,10 @@ class TrelloAuthError(TrelloError):
 
 class TrelloAccessError(TrelloError):
     """The board or card is gone, or the account can no longer see it (HTTP 403/404)."""
+
+
+class TrelloWebhookExistsError(TrelloError):
+    """Trello already has a webhook for this callback URL, board and token."""
 
 
 class TrelloRateLimitError(TrelloError):
@@ -74,6 +78,7 @@ class TrelloBoard:
     name: str
     lists: dict[str, str]  # list id -> name, in board order
     cards: dict[str, list[TrelloCard]] = field(default_factory=dict)  # list id -> cards in pos order
+    members: dict[str, str] = field(default_factory=dict)  # member id -> full name
 
     def card(self, card_id: str) -> TrelloCard | None:
         for cards in self.cards.values():
@@ -83,31 +88,33 @@ class TrelloBoard:
         return None
 
 
+def parse_card(raw: dict[str, Any], labels: dict[str, TrelloLabel], initials: dict[str, str]) -> TrelloCard:
+    return TrelloCard(
+        id=raw["id"],
+        name=raw.get("name") or "",
+        desc=raw.get("desc") or "",
+        due=raw.get("due"),
+        list_id=raw["idList"],
+        pos=float(raw.get("pos") or 0),
+        url=raw.get("shortUrl") or "",
+        labels=tuple(labels[i] for i in raw.get("idLabels", []) if i in labels),
+        members=tuple(initials[i] for i in raw.get("idMembers", []) if i in initials),
+    )
+
+
 def parse_board(raw: dict[str, Any]) -> TrelloBoard:
     """Turn the nested GET /boards/{id} response into a TrelloBoard."""
     labels = {lb["id"]: TrelloLabel(lb.get("name") or "", lb.get("color")) for lb in raw.get("labels", [])}
-    members = {m["id"]: m.get("initials") or "" for m in raw.get("members", [])}
+    initials = {m["id"]: m.get("initials") or "" for m in raw.get("members", [])}
+    names = {m["id"]: m.get("fullName") or "" for m in raw.get("members", [])}
     lists = {lst["id"]: lst["name"] for lst in sorted(raw.get("lists", []), key=lambda lst: lst.get("pos", 0))}
     cards: dict[str, list[TrelloCard]] = {list_id: [] for list_id in lists}
     for c in raw.get("cards", []):
-        if c["idList"] not in cards:
-            continue
-        cards[c["idList"]].append(
-            TrelloCard(
-                id=c["id"],
-                name=c.get("name") or "",
-                desc=c.get("desc") or "",
-                due=c.get("due"),
-                list_id=c["idList"],
-                pos=float(c.get("pos") or 0),
-                url=c.get("shortUrl") or "",
-                labels=tuple(labels[i] for i in c.get("idLabels", []) if i in labels),
-                members=tuple(members[i] for i in c.get("idMembers", []) if i in members),
-            )
-        )
+        if c["idList"] in cards:
+            cards[c["idList"]].append(parse_card(c, labels, initials))
     for list_cards in cards.values():
         list_cards.sort(key=lambda card: card.pos)
-    return TrelloBoard(id=raw["id"], name=raw.get("name") or "", lists=lists, cards=cards)
+    return TrelloBoard(id=raw["id"], name=raw.get("name") or "", lists=lists, cards=cards, members=names)
 
 
 class TrelloClient:
@@ -138,6 +145,8 @@ class TrelloClient:
                     raise TrelloConnectionError(f"Trello returned HTTP {resp.status}")
                 if resp.status >= 400:
                     text = (await resp.text())[:200]
+                    if resp.status == 400 and "already exists" in text:
+                        raise TrelloWebhookExistsError("Trello already has this webhook")
                     raise TrelloError(f"Trello returned HTTP {resp.status} for {method} {path}: {text}")
                 return await resp.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError) as err:
@@ -170,3 +179,27 @@ class TrelloClient:
             if list_id := ((action.get("data") or {}).get("listBefore") or {}).get("id"):
                 return list_id
         return None
+
+    async def create_webhook(self, callback_url: str, board_id: str, description: str) -> dict[str, Any]:
+        return await self._request(
+            "POST", "/webhooks", {"callbackURL": callback_url, "idModel": board_id, "description": description}
+        )
+
+    async def get_webhook(self, webhook_id: str) -> dict[str, Any]:
+        return await self._request("GET", f"/webhooks/{webhook_id}")
+
+    async def delete_webhook(self, webhook_id: str) -> None:
+        await self._request("DELETE", f"/webhooks/{webhook_id}")
+
+    async def get_actions(self, board_id: str, since: str | None, action_types: Iterable[str]) -> list[dict[str, Any]]:
+        params = {
+            "filter": ",".join(action_types),
+            "limit": "50",
+            "fields": "type,date,data,idMemberCreator",
+            "memberCreator_fields": "fullName,initials",
+            "member": "true",
+            "member_fields": "fullName",
+        }
+        if since:
+            params["since"] = since
+        return await self._request("GET", f"/boards/{board_id}/actions", params)

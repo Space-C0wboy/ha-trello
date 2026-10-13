@@ -1,4 +1,5 @@
 """Tests for the HA-free Trello client."""
+import re
 import aiohttp
 import pytest
 
@@ -119,3 +120,66 @@ async def test_writes_send_json(client, mock_trello):
     await client.update_card("c1", {"closed": True})
     assert bodies(mock_trello, "POST", f"{API}/cards") == [{"idList": "l_alex", "name": "Milk"}]
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"closed": True}]
+
+
+from custom_components.trello_todo.api import TrelloWebhookExistsError  # noqa: E402
+
+from .common import WEBHOOKS_URL, actions_url  # noqa: E402
+
+
+async def test_board_member_names(client, mock_trello):
+    mock_trello.get(BOARD_URL, payload=board())
+    result = await client.get_board("b1")
+    assert result.members == {"m1": "Sam", "m2": "Alex"}
+
+
+async def test_create_webhook(client, mock_trello):
+    mock_trello.post(re.compile(r"^https://api\.trello\.com/1/webhooks(\?.*)?$"), payload={"id": "w1", "active": True})
+    created = await client.create_webhook("https://hook.example/x", "b1", "Home Assistant: Household")
+    assert created["id"] == "w1"
+    (req,) = calls(mock_trello, "POST", WEBHOOKS_URL)
+    assert req.kwargs["params"] == {
+        "callbackURL": "https://hook.example/x",
+        "idModel": "b1",
+        "description": "Home Assistant: Household",
+    }
+
+
+async def test_create_webhook_already_exists(client, mock_trello):
+    mock_trello.post(
+        re.compile(r"^https://api\.trello\.com/1/webhooks(\?.*)?$"),
+        status=400,
+        body="A webhook with that callback, model, and token already exists",
+    )
+    with pytest.raises(TrelloWebhookExistsError):
+        await client.create_webhook("https://hook.example/x", "b1", "d")
+
+
+async def test_get_and_delete_webhook(client, mock_trello):
+    mock_trello.get(f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": True, "callbackURL": "u"})
+    mock_trello.delete(f"{WEBHOOKS_URL}/w1", payload={"_value": None})
+    assert (await client.get_webhook("w1"))["callbackURL"] == "u"
+    await client.delete_webhook("w1")
+    assert len(calls(mock_trello, "DELETE", f"{WEBHOOKS_URL}/w1")) == 1
+
+
+async def test_get_actions(client, mock_trello):
+    mock_trello.get(actions_url("b1"), payload=[{"id": "a1"}])
+    assert await client.get_actions("b1", "a0", ["createCard", "commentCard"]) == [{"id": "a1"}]
+    (req,) = calls(mock_trello, "GET", f"{API}/boards/b1/actions")
+    assert req.kwargs["params"] == {
+        "filter": "createCard,commentCard",
+        "limit": "50",
+        "fields": "type,date,data,idMemberCreator",
+        "memberCreator_fields": "fullName,initials",
+        "member": "true",
+        "member_fields": "fullName",
+        "since": "a0",
+    }
+
+
+async def test_get_actions_without_since(client, mock_trello):
+    mock_trello.get(actions_url("b1"), payload=[])
+    await client.get_actions("b1", None, ["createCard"])
+    (req,) = calls(mock_trello, "GET", f"{API}/boards/b1/actions")
+    assert "since" not in req.kwargs["params"]

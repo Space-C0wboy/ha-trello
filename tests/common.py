@@ -165,3 +165,28 @@ def make_entry(hass, *subentries: ConfigSubentryData, expires_at: float | None =
 
 def subentry_id(entry, board_id: str) -> str:
     return next(sid for sid, sub in entry.subentries.items() if sub.unique_id == board_id)
+
+
+def actions_url(board_id: str) -> re.Pattern[str]:
+    return re.compile(rf"^https://api\.trello\.com/1/boards/{board_id}/actions(\?.*)?$")
+
+
+WEBHOOKS_URL = f"{API}/webhooks"
+PEOPLE = {"m1": ("Sam", "S"), "m2": ("Alex", "A")}
+
+
+def action(aid: str, kind: str, *, by: str = "m2", date: str = "2026-10-13T12:00:00.000Z",
+           member: dict | None = None, **data) -> dict:
+    """A Trello action record, shaped like webhook payloads and /boards/{id}/actions entries."""
+    name, initials = PEOPLE.get(by, ("Someone", "?"))
+    record = {
+        "id": aid,
+        "type": kind,
+        "date": date,
+        "idMemberCreator": by,
+        "memberCreator": {"id": by, "fullName": name, "initials": initials},
+        "data": data,
+    }
+    if member is not None:
+        record["member"] = member
+    return record
