@@ -204,6 +204,9 @@
     },
     "checklist_ambiguous": {
       "message": "{value} matches several checklists on this card; rename one in Trello."
+    },
+    "invalid_event_times": {
+      "message": "The event must have a start and end time, with the start before the end."
     }
   },
   "entity": {
@@ -238,6 +241,11 @@
             }
           }
         }
+      }
+    },
+    "calendar": {
+      "due_dates": {
+        "name": "Due dates"
       }
     }
   },

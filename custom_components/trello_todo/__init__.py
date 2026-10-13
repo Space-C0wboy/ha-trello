@@ -20,7 +20,7 @@ from .webhooks import WebhookManager
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.TODO, Platform.EVENT]
+PLATFORMS: list[Platform] = [Platform.TODO, Platform.EVENT, Platform.CALENDAR]
 
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)

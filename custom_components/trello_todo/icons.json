@@ -1,0 +1,9 @@
+{
+  "entity": {
+    "calendar": {
+      "due_dates": {
+        "default": "mdi:calendar-check"
+      }
+    }
+  }
+}
