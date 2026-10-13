@@ -66,6 +66,7 @@ class ActionContext:
     me: str | None
     done_list: str | None
     members: dict[str, str] = field(default_factory=dict)
+    card_lists: dict[str, tuple[str, str]] = field(default_factory=dict)  # card id -> (list id, list name)
 
 
 def _ref(obj: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -98,6 +99,8 @@ def map_action(action: dict[str, Any], ctx: ActionContext) -> tuple[str, dict[st
         return None
     card = data.get("card") or {}
     current_list = data.get("listAfter") or data.get("list") or {}
+    if not current_list.get("id") and (known := ctx.card_lists.get(card.get("id") or "")):
+        current_list = {"id": known[0], "name": known[1]}  # Trello omits the list on label/checklist actions
     creator = action.get("memberCreator") or {}
     creator_id = action.get("idMemberCreator") or creator.get("id")
     attrs: dict[str, Any] = {

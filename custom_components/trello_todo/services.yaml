@@ -131,16 +131,8 @@ restore_card:
     card:
       selector:
         text: {}
+      required: true
       example: https://trello.com/c/abc12345
-    entity_id:
-      selector:
-        entity:
-          filter:
-            integration: trello_todo
-            domain: todo
-    card_name:
-      selector:
-        text: {}
 add_comment:
   fields:
     card:

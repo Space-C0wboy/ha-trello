@@ -59,6 +59,21 @@ class TrelloConnectionError(TrelloError):
     """Network failure, timeout or a 5xx from Trello."""
 
 
+def reason_code(err: Exception) -> str:
+    """A short code for errors shown to users and in diagnostics: Trello's own text can quote URLs."""
+    if isinstance(err, TrelloRateLimitError):
+        return "rate_limited"
+    if isinstance(err, TrelloAuthError):
+        return "auth"
+    if isinstance(err, TrelloAccessError):
+        return "access"
+    if isinstance(err, (TrelloConnectionError, aiohttp.ClientError)):
+        return "connection"
+    if isinstance(err, TrelloError):
+        return "rejected"
+    return "error"
+
+
 @dataclass(frozen=True, slots=True)
 class TrelloLabel:
     name: str
@@ -228,8 +243,8 @@ class TrelloClient:
             params = {**params, "before": page[-1]["id"]}
         return actions
 
-    async def get_card(self, card_id: str) -> dict[str, Any]:
-        return await self._request("GET", f"/cards/{card_id}", {"fields": "idBoard,idList,name,shortUrl,closed"})
+    async def get_card(self, card_id: str, fields: str = "idBoard,idList,name,shortUrl,closed") -> dict[str, Any]:
+        return await self._request("GET", f"/cards/{card_id}", {"fields": fields})
 
     async def add_comment(self, card_id: str, text: str) -> dict[str, Any]:
         return await self._request("POST", f"/cards/{card_id}/actions/comments", json={"text": text})

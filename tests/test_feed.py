@@ -81,6 +81,7 @@ async def test_activity_context_has_me_done_list_and_names(hass, loaded):
     ctx = _coordinator(loaded)._activity_context()
     assert (ctx.me, ctx.done_list) == ("m1", "l_done")
     assert ctx.members == {"m1": "Sam", "m2": "Alex"}
+    assert ctx.card_lists["c1"] == ("l_alex", "Alex")
 
 
 async def test_set_mode_same_mode_is_quiet(hass, loaded):

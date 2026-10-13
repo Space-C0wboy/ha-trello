@@ -23,10 +23,9 @@ from .api import (
     TrelloAccessError,
     TrelloAuthError,
     TrelloClient,
-    TrelloConnectionError,
     TrelloError,
-    TrelloRateLimitError,
     TrelloWebhookExistsError,
+    reason_code,
 )
 from .const import CONF_RETIRED_WEBHOOKS, CONF_WEBHOOKS, DOMAIN, MODE_FEED, MODE_WEBHOOK, WEBHOOK_REFRESH_MINUTES
 
@@ -38,21 +37,6 @@ _API_ERRORS = (TrelloError, ClientError, HomeAssistantError)
 # Bad signatures in a row (with none ever valid) before a board stops trusting its webhook.
 SIGNATURE_FAILURES_BEFORE_FALLBACK = 5
 MAX_RETIRED = 50
-
-
-def _reason(err: Exception) -> str:
-    """A short code for diagnostics and logs: Trello's own error text can quote the callback URL."""
-    if isinstance(err, TrelloRateLimitError):
-        return "rate_limited"
-    if isinstance(err, TrelloAuthError):
-        return "auth"
-    if isinstance(err, TrelloAccessError):
-        return "access"
-    if isinstance(err, (TrelloConnectionError, ClientError)):
-        return "connection"
-    if isinstance(err, TrelloError):
-        return "rejected"
-    return "error"
 
 
 def _cloud_active(hass: HomeAssistant) -> bool:
@@ -260,7 +244,7 @@ class WebhookManager:
         if isinstance(err, TrelloAuthError):
             self.entry.async_start_reauth(self.hass)
         self._save(coordinator.board_id, {"webhook_id": webhook_id, "callback_url": url})
-        self._fail(coordinator, _reason(err))
+        self._fail(coordinator, reason_code(err))
 
     async def _callback_url(self, webhook_id: str) -> tuple[str | None, str]:
         """(url, "") or (None, reason). Nabu Casa first, then an HTTPS external URL."""

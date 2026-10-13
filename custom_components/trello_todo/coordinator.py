@@ -98,6 +98,13 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
             me=self.config_entry.unique_id,
             done_list=self.done_list,
             members=dict(board.members) if board else {},
+            card_lists={
+                card.id: (list_id, board.lists.get(list_id, ""))
+                for list_id, cards in board.cards.items()
+                for card in cards
+            }
+            if board
+            else {},
         )
 
     async def async_poll_feed(self, _now: datetime | None = None) -> None:

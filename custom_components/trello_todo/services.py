@@ -15,7 +15,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import config_validation as cv, entity_registry as er
 from homeassistant.util import dt as dt_util
 
-from .api import TrelloAccessError, TrelloAuthError, TrelloClient, TrelloError
+from .api import TrelloAccessError, TrelloAuthError, TrelloClient, TrelloError, reason_code
 from .const import DOMAIN
 from .coordinator import TrelloBoardCoordinator
 from .resolve import (
@@ -28,14 +28,16 @@ from .resolve import (
     resolve_member,
 )
 from .todo import due_to_trello
-from .webhooks import _reason
 
 POSITIONS = ["top", "bottom"]
 KEEP = ["all", "checklists", "labels", "members", "due", "none"]
 
+# One entity, also accepted as a one-item list (what YAML `target: {entity_id: ...}` becomes).
+SINGLE_ENTITY = vol.All(cv.entity_ids, vol.Length(min=1, max=1), lambda ids: ids[0])
+
 CARD_REF = {
     vol.Optional("card"): cv.string,
-    vol.Optional("entity_id"): cv.entity_id,
+    vol.Optional("entity_id"): SINGLE_ENTITY,
     vol.Optional("card_name"): cv.string,
 }
 
@@ -147,7 +149,7 @@ def _raise_api(hass: HomeAssistant, coordinator: TrelloBoardCoordinator, err: Ex
         coordinator.config_entry.async_start_reauth(hass)
         raise HomeAssistantError(translation_domain=DOMAIN, translation_key="auth_failed") from err
     raise HomeAssistantError(
-        translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": _reason(err)}
+        translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": reason_code(err)}
     ) from err
 
 
@@ -157,17 +159,15 @@ async def _api(
     call: Callable[[TrelloClient], Awaitable[Any]],
     *,
     card: str = "",
-    ok_statuses: tuple[int, ...] = (),
 ) -> Any:
-    """Run one Trello call; map its errors. `ok_statuses` makes e.g. "label already on card" a success."""
+    """Run one Trello call and map its errors."""
     try:
         return await call(coordinator.client)
     except TrelloError as err:
-        if err.status in ok_statuses:
-            return None
         if isinstance(err, TrelloAccessError):
+            # The card, or the list/label/member/board the call refers to, is gone or not visible.
             raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="card_not_found", translation_placeholders={"card": card}
+                translation_domain=DOMAIN, translation_key="trello_not_found", translation_placeholders={"card": card}
             ) from err
         _raise_api(hass, coordinator, err)
     except (ClientError, HomeAssistantError) as err:  # a failed token refresh
@@ -216,6 +216,11 @@ def _handler(fn: Callable[[ServiceCall], Awaitable[Result]]) -> Callable[[Servic
     return wrapper
 
 
+def _names(values: list[str]) -> list[str]:
+    """Label/member inputs: a list, comma-separated text, or both; blank rows from the UI are ignored."""
+    return [part.strip() for value in values for part in str(value).split(",") if part.strip()]
+
+
 def _due(value: Any) -> str | None:
     """Date → local midnight; naive datetime → local time; empty → clear."""
     if value in (None, ""):
@@ -238,7 +243,7 @@ def _due(value: Any) -> str | None:
 # -- card actions -------------------------------------------------------------------------------------
 CREATE_SCHEMA = vol.Schema(
     {
-        vol.Optional("entity_id"): cv.entity_id,
+        vol.Optional("entity_id"): SINGLE_ENTITY,
         vol.Optional("board"): cv.string,
         vol.Optional("list"): cv.string,
         vol.Required("name"): cv.string,
@@ -269,10 +274,10 @@ async def _create_card(call: ServiceCall) -> Result:
         fields["desc"] = data["description"]
     if (due := _due(data.get("due"))) is not None:
         fields["due"] = due
-    if data.get("labels"):
-        fields["idLabels"] = ",".join(resolve_label(board, value) for value in data["labels"])
-    if data.get("members"):
-        fields["idMembers"] = ",".join(resolve_member(board, value) for value in data["members"])
+    if _names(data.get("labels") or []):
+        fields["idLabels"] = ",".join(resolve_label(board, value) for value in _names(data["labels"]))
+    if _names(data.get("members") or []):
+        fields["idMembers"] = ",".join(resolve_member(board, value) for value in _names(data["members"]))
     raw = await _api(hass, coordinator, lambda client: client.create_card(fields))
     return _info(coordinator, raw), [coordinator]
 
@@ -329,6 +334,7 @@ async def _move_card(call: ServiceCall) -> Result:
 
 
 CARD_ONLY_SCHEMA = _card_schema({})
+RESTORE_SCHEMA = vol.Schema({vol.Required("card"): cv.string})
 
 
 def _closed_handler(closed: bool) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
@@ -388,7 +394,7 @@ MEMBER_SCHEMA = _card_schema({vol.Required("member"): cv.string})
 
 
 def _membership_handler(field: str, add: bool) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
-    """Labels and members. Already there (add) or already gone (remove) counts as success."""
+    """Labels and members. Already as asked (on the card for add, off it for remove) is a success with no write."""
 
     @_handler
     async def handle(call: ServiceCall) -> Result:
@@ -400,12 +406,20 @@ def _membership_handler(field: str, add: bool) -> Callable[[ServiceCall], Awaita
         else:
             value_id = resolve_member(board, call.data["member"])
             method = "add_member" if add else "remove_member"
+        current = await _api(
+            call.hass,
+            target.coordinator,
+            lambda client: client.get_card(target.card_id, "idLabels,idMembers"),
+            card=target.card_id,
+        )
+        on_card = value_id in ((current or {}).get("idLabels" if field == "label" else "idMembers") or [])
+        if on_card == add:
+            return _target_info(target), []
         await _api(
             call.hass,
             target.coordinator,
             lambda client: getattr(client, method)(target.card_id, value_id),
             card=target.card_id,
-            ok_statuses=(400,) if add else (400, 404),
         )
         return _target_info(target), [target.coordinator]
 
@@ -430,6 +444,8 @@ async def _add_checklist_item(call: ServiceCall) -> Result:
     card_id = target.card_id
     checklists = await _api(hass, target.coordinator, lambda client: client.get_checklists(card_id), card=card_id)
     found = _named(checklists or [], data["checklist"])
+    if len(found) > 1:
+        raise ResolveError("checklist_ambiguous", value=data["checklist"])
     checklist = found[0] if found else await _api(
         hass, target.coordinator, lambda client: client.create_checklist(card_id, data["checklist"]), card=card_id
     )
@@ -468,7 +484,7 @@ SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], v
     "copy_card": (_copy_card, COPY_SCHEMA),
     "move_card": (_move_card, MOVE_SCHEMA),
     "archive_card": (_closed_handler(True), CARD_ONLY_SCHEMA),
-    "restore_card": (_closed_handler(False), CARD_ONLY_SCHEMA),
+    "restore_card": (_closed_handler(False), RESTORE_SCHEMA),
     "set_due": (_set_due, SET_DUE_SCHEMA),
     "add_comment": (_add_comment, COMMENT_SCHEMA),
     "add_label": (_membership_handler("label", True), LABEL_SCHEMA),

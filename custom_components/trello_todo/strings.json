@@ -198,6 +198,12 @@
     },
     "checklist_item_ambiguous": {
       "message": "{value} matches several checklist items; name the checklist or use the item id."
+    },
+    "trello_not_found": {
+      "message": "Trello couldn't find card {card} or something it refers to (list, label, member or board). It may have been deleted since the last refresh."
+    },
+    "checklist_ambiguous": {
+      "message": "{value} matches several checklists on this card; rename one in Trello."
     }
   },
   "entity": {
@@ -246,7 +252,7 @@
         },
         "board": {
           "name": "Board",
-          "description": "Board name or id. Only needed with several boards, or to move or copy to another board."
+          "description": "Board name or id. Only needed with several boards (with list)."
         },
         "list": {
           "name": "List",
@@ -370,15 +376,7 @@
       "fields": {
         "card": {
           "name": "Card",
-          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
-        },
-        "entity_id": {
-          "name": "To-do list",
-          "description": "A Trello to-do list. With card name, finds the card in that list."
-        },
-        "card_name": {
-          "name": "Card name",
-          "description": "Name of the card in that list (case-insensitive)."
+          "description": "Trello card id, short link or URL. Archived cards are not in any to-do list."
         }
       }
     },

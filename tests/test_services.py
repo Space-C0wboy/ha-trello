@@ -236,20 +236,39 @@ async def test_add_comment(hass, loaded, mock_trello):
     assert result["list_name"] == "Alex"
 
 
+def _card_now(mock_trello, labels=(), members=()):
+    """What Trello says is on card c1 right now (the read before a label/member change)."""
+    mock_trello.get(card_url("c1"), payload={"id": "c1", "idLabels": list(labels), "idMembers": list(members)})
+
+
 @pytest.mark.parametrize("label", ["Urgent", "lb1"])
 async def test_add_label(hass, loaded, mock_trello, label):
+    _card_now(mock_trello)
     mock_trello.post(f"{API}/cards/c1/idLabels", payload=[])
     await _call(hass, "add_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": label})
     assert bodies(mock_trello, "POST", f"{API}/cards/c1/idLabels") == [{"value": "lb1"}]
+    (req,) = calls(mock_trello, "GET", f"{API}/cards/c1")
+    assert req.kwargs["params"] == {"fields": "idLabels,idMembers"}
 
 
 async def test_add_label_already_present_is_success(hass, loaded, mock_trello):
-    """Review Focus 2."""
-    mock_trello.post(f"{API}/cards/c1/idLabels", status=400, body="that label is already on the card")
+    """Already there: success without a write (and without guessing from Trello's error text)."""
+    _card_now(mock_trello, labels=["lb1"])
     await _call(hass, "add_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": "Urgent"})
+    assert calls(mock_trello, "POST", f"{API}/cards/c1/idLabels") == []
+
+
+async def test_add_label_trello_400_is_a_real_error(hass, loaded, mock_trello):
+    """Not on the card, yet Trello refuses (e.g. label deleted since the last refresh): report it."""
+    _card_now(mock_trello)
+    mock_trello.post(f"{API}/cards/c1/idLabels", status=400, body="invalid value for value")
+    with pytest.raises(HomeAssistantError) as info:
+        await _call(hass, "add_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": "Urgent"})
+    assert info.value.translation_key == "api_error"
 
 
 async def test_remove_label(hass, loaded, mock_trello):
+    _card_now(mock_trello, labels=["lb2"])
     mock_trello.delete(f"{API}/cards/c1/idLabels/lb2", payload=[])
     await _call(hass, "remove_label", {"entity_id": "todo.alex", "card_name": "Buy stamps", "label": "green"})
     assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idLabels/lb2")) == 1
@@ -262,23 +281,27 @@ async def test_unknown_label(hass, loaded):
 
 
 async def test_assign_member_by_username(hass, loaded, mock_trello):
+    _card_now(mock_trello)
     mock_trello.post(f"{API}/cards/c1/idMembers", payload=[])
     await _call(hass, "assign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "alex"})
     assert bodies(mock_trello, "POST", f"{API}/cards/c1/idMembers") == [{"value": "m2"}]
 
 
 async def test_remove_member_not_present_is_success(hass, loaded, mock_trello):
-    """Review Focus 2."""
-    mock_trello.delete(f"{API}/cards/c1/idMembers/m1", status=400, body="member is not on the card")
+    _card_now(mock_trello, members=["m2"])
     await _call(hass, "unassign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "Sam"})
+    assert calls(mock_trello, "DELETE", f"{API}/cards/c1/idMembers/m1") == []
 
 
-async def test_unassign_member_404_is_success(hass, loaded, mock_trello):
-    mock_trello.delete(f"{API}/cards/c1/idMembers/m1", status=404, body="not found")
+async def test_unassign_member(hass, loaded, mock_trello):
+    _card_now(mock_trello, members=["m1"])
+    mock_trello.delete(f"{API}/cards/c1/idMembers/m1", payload=[])
     await _call(hass, "unassign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "Sam"})
+    assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idMembers/m1")) == 1
 
 
 async def test_add_member_server_error_still_fails(hass, loaded, mock_trello):
+    _card_now(mock_trello)
     mock_trello.post(f"{API}/cards/c1/idMembers", status=500)
     with pytest.raises(HomeAssistantError):
         await _call(hass, "assign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "alex"})
@@ -362,3 +385,48 @@ async def test_card_name_found_after_fresh_refresh(hass, loaded, mock_trello):
     mock_trello.post(f"{API}/cards/new/actions/comments", payload={"id": "act9"})
     await _call(hass, "add_comment", {"entity_id": "todo.alex", "card_name": "Just created", "text": "hi"})
     assert bodies(mock_trello, "POST", f"{API}/cards/new/actions/comments") == [{"text": "hi"}]
+
+
+# --- small-issue fixes ----------------------------------------------------------------------------
+
+
+async def test_restore_card_needs_card(hass, loaded):
+    """Archived cards are in no to-do list, so restore_card only takes `card`."""
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "restore_card", {"entity_id": "todo.alex", "card_name": "Buy stamps"})
+
+
+async def test_add_checklist_item_ambiguous_checklist(hass, loaded, mock_trello):
+    two = [{"id": "cl1", "name": "Groceries", "checkItems": []}, {"id": "cl2", "name": "groceries", "checkItems": []}]
+    mock_trello.get(checklists_url("c1"), payload=two)
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "add_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "checklist": "Groceries", "item": "Milk"})
+    assert info.value.translation_key == "checklist_ambiguous"
+
+
+async def test_create_card_labels_comma_separated_and_blanks(hass, loaded, mock_trello):
+    mock_trello.post(f"{API}/cards", payload=card("new", "Fix", "l_sam", 99))
+    await _call(hass, "create_card", {"list": "Sam", "name": "Fix", "labels": ["Urgent, green", ""], "members": "alex, "})
+    body = bodies(mock_trello, "POST", f"{API}/cards")[0]
+    assert body["idLabels"] == "lb1,lb2"
+    assert body["idMembers"] == "m2"
+
+
+async def test_not_found_inside_action_is_not_blamed_on_the_card(hass, loaded, mock_trello):
+    """A 404 on the write (e.g. a list deleted since the last refresh) is "card or something it refers to"."""
+    mock_trello.put(f"{API}/cards/c1", status=404, body="not found")
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "move_card", {"entity_id": "todo.alex", "card_name": "Buy stamps", "list": "Sam"})
+    assert info.value.translation_key == "trello_not_found"
+
+
+async def test_entity_id_as_single_item_list(hass, loaded, mock_trello):
+    """YAML `target: {entity_id: todo.x}` arrives as a one-item list."""
+    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_sam", 1))
+    await _call(hass, "move_card", {"entity_id": ["todo.alex"], "card_name": "Buy stamps", "list": "Sam"})
+    assert len(calls(mock_trello, "PUT", f"{API}/cards/c1")) == 1
+
+
+async def test_entity_id_two_items_invalid(hass, loaded):
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "move_card", {"entity_id": ["todo.alex", "todo.sam"], "card_name": "x", "list": "Sam"})

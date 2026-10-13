@@ -252,3 +252,11 @@ async def test_live_activity_counts_as_baseline():
     await proc.async_process([_comment("a1", "2026-10-13T12:00:01Z")])
     assert proc.baselined is True
     assert fired == [("comment_added", "a1")]
+
+
+def test_list_filled_from_known_cards():
+    """Trello omits the list on label/checklist actions; the board's cached cards fill it in."""
+    ctx = ActionContext(me="m1", done_list="l_done", members={}, card_lists={"c1": ("l_alex", "Alex")})
+    _, attrs = map_action(action("a1", "addLabelToCard", card=CARD, label={"id": "lb1", "name": "Urgent", "color": "red"}), ctx)
+    assert (attrs["list_id"], attrs["list_name"]) == ("l_alex", "Alex")
+
