@@ -113,7 +113,11 @@ def calls(mock, method: str, url: str) -> list:
 
 
 def bodies(mock, method: str, url: str) -> list[dict]:
-    return [c.kwargs["json"] for c in calls(mock, method, url)]
+    """The fields each request sent: its JSON body plus cleared fields (`?due=null` query params) as None."""
+    return [
+        {**(c.kwargs.get("json") or {}), **{k: None for k, v in (c.kwargs.get("params") or {}).items() if v == "null"}}
+        for c in calls(mock, method, url)
+    ]
 
 
 CLIENT_ID = "client-id"

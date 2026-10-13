@@ -122,6 +122,7 @@ async def test_writes_send_json(client, mock_trello):
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"closed": True}]
 
 
+
 from custom_components.trello_todo.api import TrelloWebhookExistsError  # noqa: E402
 
 from .common import WEBHOOKS_URL, actions_url  # noqa: E402
@@ -269,3 +270,21 @@ async def test_card_sub_resources(client, mock_trello):
     assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idMembers/m2")) == 1
     (req,) = calls(mock_trello, "GET", f"{API}/cards/c1/checklists")
     assert req.kwargs["params"] == {"fields": "name", "checkItems": "all", "checkItem_fields": "name,state"}
+
+
+async def test_cleared_fields_sent_as_null_query_params(client, mock_trello):
+    """Trello ignores JSON nulls (live: a due date never cleared); `?due=null` clears it."""
+    mock_trello.put(card_url("c1"), payload={})
+    await client.update_card("c1", {"due": None, "start": None, "name": "x"})
+    (put,) = calls(mock_trello, "PUT", f"{API}/cards/c1")
+    assert put.kwargs["params"] == {"due": "null", "start": "null"}
+    assert put.kwargs["json"] == {"name": "x"}
+
+
+async def test_only_cleared_fields_send_no_body(client, mock_trello):
+    mock_trello.put(card_url("c1"), payload={})
+    await client.update_card("c1", {"due": None})
+    (put,) = calls(mock_trello, "PUT", f"{API}/cards/c1")
+    assert put.kwargs["params"] == {"due": "null"}
+    assert put.kwargs["json"] is None
+

@@ -10,7 +10,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.trello_todo.const import DOMAIN
 
-from .common import API, BOARD_URL, board, bodies, calls, card, subentry_id
+from .common import API, BOARD_URL, board, bodies, calls, card, card_url, subentry_id
 
 CAL = "calendar.household_due_dates"
 NOW = "2026-10-14T15:00:00+00:00"  # 10:00 in Chicago
@@ -94,7 +94,7 @@ async def test_state_and_next_event(hass, cal, freezer):
 
 
 async def test_update_via_websocket(hass, cal, mock_trello, hass_ws_client):
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     client = await hass_ws_client(hass)
     await client.send_json_auto_id({
         "type": "calendar/event/update", "entity_id": CAL, "uid": "c1",
@@ -105,7 +105,7 @@ async def test_update_via_websocket(hass, cal, mock_trello, hass_ws_client):
 
 
 async def test_update_longer_event_sets_start(hass, cal, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     await _entity(hass).async_update_event(
         "c1",
         {"dtstart": dt_util.parse_datetime("2026-10-20T13:00:00+00:00"),
@@ -150,7 +150,7 @@ async def test_update_unknown_uid(hass, cal):
 async def test_update_mirrors_locally(hass, cal, mock_trello):
     for coordinator in cal.runtime_data.boards.values():
         coordinator.async_request_refresh = AsyncMock()
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     await _entity(hass).async_update_event(
         "c1",
         {"dtstart": dt_util.parse_datetime("2026-10-20T14:00:00+00:00"),
@@ -161,7 +161,7 @@ async def test_update_mirrors_locally(hass, cal, mock_trello):
 
 
 async def test_delete_clears_due_and_start(hass, cal, mock_trello, hass_ws_client):
-    mock_trello.put(f"{API}/cards/c2", payload={})
+    mock_trello.put(card_url("c2"), payload={})
     client = await hass_ws_client(hass)
     await client.send_json_auto_id({"type": "calendar/event/delete", "entity_id": CAL, "uid": "c2"})
     assert (await client.receive_json())["success"]
@@ -173,14 +173,14 @@ async def test_delete_clears_due_and_start(hass, cal, mock_trello, hass_ws_clien
     [(404, ServiceValidationError, "card_not_found"), (429, HomeAssistantError, "api_error")],
 )
 async def test_write_errors(hass, cal, mock_trello, status, error, key):
-    mock_trello.put(f"{API}/cards/c1", status=status, body="nope")
+    mock_trello.put(card_url("c1"), status=status, body="nope")
     with pytest.raises(error) as info:
         await _entity(hass).async_delete_event("c1")
     assert info.value.translation_key == key
 
 
 async def test_auth_error_starts_reauth(hass, cal, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", status=401, body="invalid token")
+    mock_trello.put(card_url("c1"), status=401, body="invalid token")
     with pytest.raises(HomeAssistantError) as info:
         await _entity(hass).async_delete_event("c1")
     assert info.value.translation_key == "auth_failed"
@@ -201,7 +201,7 @@ async def test_unavailable_when_board_inaccessible(hass, cal, mock_trello):
 
 async def test_update_across_fall_back_hour(hass, cal, mock_trello):
     """01:40 CDT -> 01:10 CST is 30 real minutes: compare in UTC, not wall-clock time."""
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     start = dt_util.as_local(dt_util.parse_datetime("2026-11-01T06:40:00+00:00"))
     end = dt_util.as_local(dt_util.parse_datetime("2026-11-01T07:10:00+00:00"))
     assert start.tzinfo is end.tzinfo and start.replace(tzinfo=None) > end.replace(tzinfo=None)
@@ -210,7 +210,7 @@ async def test_update_across_fall_back_hour(hass, cal, mock_trello):
 
 
 async def test_card_not_found_names_the_card(hass, cal, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", status=404, body="not found")
+    mock_trello.put(card_url("c1"), status=404, body="not found")
     with pytest.raises(ServiceValidationError) as info:
         await _entity(hass).async_delete_event("c1")
     assert info.value.translation_placeholders == {"card": "Pay bill"}

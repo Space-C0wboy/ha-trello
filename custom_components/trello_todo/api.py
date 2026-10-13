@@ -205,7 +205,10 @@ class TrelloClient:
         return await self._request("POST", "/cards", json=fields)
 
     async def update_card(self, card_id: str, fields: dict[str, Any]) -> dict[str, Any]:
-        return await self._request("PUT", f"/cards/{card_id}", json=fields)
+        # Trello silently ignores JSON nulls; a cleared field (due, start) must go as `?field=null`.
+        cleared = {key: "null" for key, value in fields.items() if value is None}
+        body = {key: value for key, value in fields.items() if value is not None}
+        return await self._request("PUT", f"/cards/{card_id}", params=cleared or None, json=body or None)
 
     async def get_last_list_move(self, card_id: str) -> str | None:
         """The list a card was most recently moved out of, from its action history."""

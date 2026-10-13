@@ -5,6 +5,7 @@ import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .common import (
+    card_url,
     API,
     LISTS,
     TOKEN_URL,
@@ -47,13 +48,13 @@ async def test_create_with_datetime(hass, loaded, mock_trello):
 
 
 async def test_update_fields(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "rename": "Buy more stamps", "description": "x"})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"name": "Buy more stamps", "desc": "x"}]
 
 
 async def test_update_clears_due(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c2", payload={})
+    mock_trello.put(card_url("c2"), payload={})
     await _service(hass, "update_item", {"item": "c2", "due_datetime": None})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c2") == [{"due": None}]
 
@@ -64,7 +65,7 @@ async def test_update_unchanged_sends_nothing(hass, loaded, mock_trello):
 
 
 async def test_update_by_summary(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c3", payload={})
+    mock_trello.put(card_url("c3"), payload={})
     await _service(hass, "update_item", {"item": "Pay invoice", "status": "completed"})
     assert len(calls(mock_trello, "PUT", f"{API}/cards/c3")) == 1
 
@@ -79,13 +80,13 @@ async def test_update_by_summary(hass, loaded, mock_trello):
 )
 async def test_complete_done_behaviors(hass, load_entry, mock_trello, behavior, done_list, expected):
     await load_entry(board_subentry(done_behavior=behavior, done_list=done_list))
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "status": "completed"})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [expected]
 
 
 async def test_complete_with_rename_is_one_request(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "rename": "Stamps", "status": "completed"})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"name": "Stamps", "idList": "l_done", "pos": "top"}]
 
@@ -100,8 +101,8 @@ async def test_complete_when_done_list_missing(hass, load_entry, mock_trello):
 
 
 async def test_delete_archives(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", payload={})
-    mock_trello.put(f"{API}/cards/c2", payload={})
+    mock_trello.put(card_url("c1"), payload={})
+    mock_trello.put(card_url("c2"), payload={})
     await _service(hass, "remove_item", {"item": ["c1", "c2"]})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"closed": True}]
     assert bodies(mock_trello, "PUT", f"{API}/cards/c2") == [{"closed": True}]
@@ -140,13 +141,13 @@ async def test_unknown_uid(hass, loaded):
 
 
 async def test_write_error_raises(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", status=500)
+    mock_trello.put(card_url("c1"), status=500)
     with pytest.raises(HomeAssistantError):
         await _service(hass, "update_item", {"item": "c1", "status": "completed"})
 
 
 async def test_write_401_starts_reauth(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", status=401, body="invalid token")
+    mock_trello.put(card_url("c1"), status=401, body="invalid token")
     with pytest.raises(HomeAssistantError):
         await _service(hass, "update_item", {"item": "c1", "status": "completed"})
     await hass.async_block_till_done()
@@ -155,21 +156,21 @@ async def test_write_401_starts_reauth(hass, loaded, mock_trello):
 
 async def test_uncheck_returns_card_to_previous_list(hass, loaded, mock_trello):
     mock_trello.get(card_actions_url("c9"), payload=[{"data": {"listBefore": {"id": "l_sam"}}}])
-    mock_trello.put(f"{API}/cards/c9", payload={})
+    mock_trello.put(card_url("c9"), payload={})
     await _service(hass, "update_item", {"item": "c9", "status": "needs_action"}, entity_id=DONE)
     assert bodies(mock_trello, "PUT", f"{API}/cards/c9") == [{"idList": "l_sam", "pos": "top"}]
 
 
 async def test_uncheck_without_history_uses_first_list(hass, loaded, mock_trello):
     mock_trello.get(card_actions_url("c9"), payload=[])
-    mock_trello.put(f"{API}/cards/c9", payload={})
+    mock_trello.put(card_url("c9"), payload={})
     await _service(hass, "update_item", {"item": "c9", "status": "needs_action"}, entity_id=DONE)
     assert bodies(mock_trello, "PUT", f"{API}/cards/c9") == [{"idList": "l_alex", "pos": "top"}]
 
 
 async def test_uncheck_when_previous_list_is_gone(hass, loaded, mock_trello):
     mock_trello.get(card_actions_url("c9"), payload=[{"data": {"listBefore": {"id": "l_old"}}}])
-    mock_trello.put(f"{API}/cards/c9", payload={})
+    mock_trello.put(card_url("c9"), payload={})
     await _service(hass, "update_item", {"item": "c9", "status": "needs_action"}, entity_id=DONE)
     assert bodies(mock_trello, "PUT", f"{API}/cards/c9") == [{"idList": "l_alex", "pos": "top"}]
 
@@ -184,13 +185,13 @@ async def test_uncheck_with_no_other_list(hass, load_entry, mock_trello):
 
 
 async def test_rename_completed_item_keeps_it_done(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c9", payload={})
+    mock_trello.put(card_url("c9"), payload={})
     await _service(hass, "update_item", {"item": "c9", "rename": "Older thing"}, entity_id=DONE)
     assert bodies(mock_trello, "PUT", f"{API}/cards/c9") == [{"name": "Older thing"}]
 
 
 async def test_clear_completed_archives(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c9", payload={})
+    mock_trello.put(card_url("c9"), payload={})
     await hass.services.async_call("todo", "remove_completed_items", {"entity_id": DONE}, blocking=True)
     assert bodies(mock_trello, "PUT", f"{API}/cards/c9") == [{"closed": True}]
 
@@ -198,7 +199,7 @@ async def test_clear_completed_archives(hass, loaded, mock_trello):
 async def test_write_refreshes_only_its_board(hass, load_entry, mock_trello):
     await load_entry(board_subentry(), board_subentry("b2", "Projects", "archive", None))
     b1_before, b2_before = _board_requests(mock_trello, "b1"), _board_requests(mock_trello, "b2")
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "status": "completed"})
     assert _board_requests(mock_trello, "b1") == b1_before + 1
     assert _board_requests(mock_trello, "b2") == b2_before
@@ -213,7 +214,7 @@ async def test_write_with_expired_token_refreshes_first(hass, loaded, mock_trell
         TOKEN_URL,
         payload={"access_token": "new-access", "refresh_token": "new-refresh", "expires_in": 3600, "token_type": "Bearer"},
     )
-    mock_trello.put(f"{API}/cards/c1", payload={})
+    mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "status": "completed"})
     (put,) = calls(mock_trello, "PUT", f"{API}/cards/c1")
     assert put.kwargs["headers"]["Authorization"] == "Bearer new-access"

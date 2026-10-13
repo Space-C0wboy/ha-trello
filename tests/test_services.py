@@ -90,7 +90,7 @@ async def test_create_card_board_required_with_two_boards(hass, load_entry):
 async def test_move_card_by_card_id(hass, loaded, mock_trello):
     """Review Focus 1: event card_id passes straight in."""
     _card_get(mock_trello)
-    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_done", 1))
+    mock_trello.put(card_url("c1"), payload=card("c1", "Buy stamps", "l_done", 1))
     result = await _call(hass, "move_card", {"card": "c1", "list": "Done & Archive"}, response=True)
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"idList": "l_done", "pos": "top"}]
     assert result == INFO
@@ -98,13 +98,13 @@ async def test_move_card_by_card_id(hass, loaded, mock_trello):
 
 async def test_move_card_by_url(hass, loaded, mock_trello):
     _card_get(mock_trello, card_id="abc12345")
-    mock_trello.put(f"{API}/cards/abc12345", payload=card("abc12345", "X", "l_done", 1))
+    mock_trello.put(card_url("abc12345"), payload=card("abc12345", "X", "l_done", 1))
     await _call(hass, "move_card", {"card": "https://trello.com/c/abc12345/7-x", "list": "Done & Archive"})
     assert len(calls(mock_trello, "GET", f"{API}/cards/abc12345")) == 1
 
 
 async def test_move_card_by_entity_and_name(hass, loaded, mock_trello):
-    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_sam", 1))
+    mock_trello.put(card_url("c1"), payload=card("c1", "Buy stamps", "l_sam", 1))
     await _call(hass, "move_card", {"entity_id": "todo.alex", "card_name": "buy stamps", "list": "Sam", "position": "bottom"})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"idList": "l_sam", "pos": "bottom"}]
 
@@ -114,7 +114,7 @@ async def test_move_card_to_other_board(hass, load_entry, mock_trello):
     await load_entry(board_subentry(), board_subentry("b2", "Projects", "archive", None))
     _card_get(mock_trello)
     venues = LISTS_B2[0]["id"]
-    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", venues, 1))
+    mock_trello.put(card_url("c1"), payload=card("c1", "Buy stamps", venues, 1))
     b1, b2 = _board_requests(mock_trello, "b1"), _board_requests(mock_trello, "b2")
     await _call(hass, "move_card", {"card": "c1", "board": "projects", "list": "Venues"})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"idList": venues, "pos": "top", "idBoard": "b2"}]
@@ -159,7 +159,7 @@ async def test_not_a_trello_list(hass, loaded):
 @pytest.mark.parametrize(("service", "closed"), [("archive_card", True), ("restore_card", False)])
 async def test_archive_and_restore(hass, loaded, mock_trello, service, closed):
     _card_get(mock_trello)
-    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_alex", 1))
+    mock_trello.put(card_url("c1"), payload=card("c1", "Buy stamps", "l_alex", 1))
     await _call(hass, service, {"card": "c1"})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"closed": closed}]
 
@@ -176,7 +176,7 @@ async def test_copy_card(hass, loaded, mock_trello, keep, source):
 
 async def test_set_due_date_is_local_midnight(hass, loaded, mock_trello):
     """Review Focus 4."""
-    mock_trello.put(f"{API}/cards/c3", payload=card("c3", "Pay invoice", "l_alex", 1))
+    mock_trello.put(card_url("c3"), payload=card("c3", "Pay invoice", "l_alex", 1))
     await _call(hass, "set_due", {"entity_id": "todo.alex", "card_name": "Pay invoice", "due": "2026-10-20"})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c3") == [{"due": "2026-10-20T05:00:00+00:00"}]
 
@@ -191,7 +191,7 @@ async def test_set_due_date_is_local_midnight(hass, loaded, mock_trello):
     ],
 )
 async def test_set_due_variants(hass, loaded, mock_trello, data, expected):
-    mock_trello.put(f"{API}/cards/c3", payload=card("c3", "Pay invoice", "l_alex", 1))
+    mock_trello.put(card_url("c3"), payload=card("c3", "Pay invoice", "l_alex", 1))
     await _call(hass, "set_due", {"entity_id": "todo.alex", "card_name": "Pay invoice", **data})
     assert bodies(mock_trello, "PUT", f"{API}/cards/c3") == [expected]
 
@@ -204,13 +204,13 @@ async def test_set_due_needs_something(hass, loaded):
 
 async def test_response_only_when_asked(hass, loaded, mock_trello):
     _card_get(mock_trello)
-    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_alex", 1))
+    mock_trello.put(card_url("c1"), payload=card("c1", "Buy stamps", "l_alex", 1))
     assert await _call(hass, "archive_card", {"card": "c1"}) is None
 
 
 async def test_401_starts_reauth(hass, loaded, mock_trello):
     _card_get(mock_trello)
-    mock_trello.put(f"{API}/cards/c1", status=401, body="invalid token")
+    mock_trello.put(card_url("c1"), status=401, body="invalid token")
     with pytest.raises(HomeAssistantError) as info:
         await _call(hass, "archive_card", {"card": "c1"})
     assert info.value.translation_key == "auth_failed"
@@ -220,7 +220,7 @@ async def test_401_starts_reauth(hass, loaded, mock_trello):
 
 async def test_server_error_reason_code(hass, loaded, mock_trello):
     _card_get(mock_trello)
-    mock_trello.put(f"{API}/cards/c1", status=503, body="secret-ish upstream text")
+    mock_trello.put(card_url("c1"), status=503, body="secret-ish upstream text")
     with pytest.raises(HomeAssistantError) as info:
         await _call(hass, "archive_card", {"card": "c1"})
     assert info.value.translation_key == "api_error"
@@ -414,7 +414,7 @@ async def test_create_card_labels_comma_separated_and_blanks(hass, loaded, mock_
 
 async def test_not_found_inside_action_is_not_blamed_on_the_card(hass, loaded, mock_trello):
     """A 404 on the write (e.g. a list deleted since the last refresh) is "card or something it refers to"."""
-    mock_trello.put(f"{API}/cards/c1", status=404, body="not found")
+    mock_trello.put(card_url("c1"), status=404, body="not found")
     with pytest.raises(ServiceValidationError) as info:
         await _call(hass, "move_card", {"entity_id": "todo.alex", "card_name": "Buy stamps", "list": "Sam"})
     assert info.value.translation_key == "trello_not_found"
@@ -422,7 +422,7 @@ async def test_not_found_inside_action_is_not_blamed_on_the_card(hass, loaded, m
 
 async def test_entity_id_as_single_item_list(hass, loaded, mock_trello):
     """YAML `target: {entity_id: todo.x}` arrives as a one-item list."""
-    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_sam", 1))
+    mock_trello.put(card_url("c1"), payload=card("c1", "Buy stamps", "l_sam", 1))
     await _call(hass, "move_card", {"entity_id": ["todo.alex"], "card_name": "Buy stamps", "list": "Sam"})
     assert len(calls(mock_trello, "PUT", f"{API}/cards/c1")) == 1
 
