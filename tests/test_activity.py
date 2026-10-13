@@ -174,3 +174,73 @@ def test_attachment_added():
         action("a1", "addAttachmentToCard", card=CARD, list=ALEX_LIST, attachment={"id": "at", "name": "photo.jpg"}), CTX
     )
     assert (event_type, attrs["attachment"]) == ("attachment_added", "photo.jpg")
+
+
+from unittest.mock import AsyncMock  # noqa: E402
+
+from custom_components.trello_todo.activity import ActivityProcessor  # noqa: E402
+
+
+def _processor():
+    refresh = AsyncMock()
+    proc = ActivityProcessor(lambda: CTX, refresh)
+    fired: list[tuple[str, dict]] = []
+    proc.add_listener(lambda event_type, attrs: fired.append((event_type, attrs["action_id"])))
+    return proc, refresh, fired
+
+
+def _comment(aid, date):
+    return action(aid, "commentCard", date=date, card=CARD, list=ALEX_LIST, text="hi")
+
+
+async def test_batch_fires_every_event_in_order():
+    proc, refresh, fired = _processor()
+    await proc.async_process([_comment("a2", "2026-10-13T12:00:02Z"), _comment("a1", "2026-10-13T12:00:01Z")])
+    assert fired == [("comment_added", "a1"), ("comment_added", "a2")]
+    refresh.assert_awaited_once()
+
+
+async def test_duplicates_dropped_across_batches():
+    proc, refresh, fired = _processor()
+    await proc.async_process([_comment("a1", "2026-10-13T12:00:01Z")])
+    await proc.async_process([_comment("a1", "2026-10-13T12:00:01Z")])
+    assert fired == [("comment_added", "a1")]
+    assert refresh.await_count == 1
+
+
+async def test_baseline_fires_nothing():
+    proc, refresh, fired = _processor()
+    proc.set_baseline([_comment("a1", "2026-10-13T12:00:01Z")])
+    assert proc.baselined is True
+    assert proc.newest_id == "a1"
+    await proc.async_process([_comment("a1", "2026-10-13T12:00:01Z")])
+    assert fired == []
+    refresh.assert_not_awaited()
+
+
+async def test_unmapped_actions_still_refresh():
+    proc, refresh, fired = _processor()
+    await proc.async_process([action("a1", "updateBoard", board={"id": "b1"})])
+    assert fired == []
+    refresh.assert_awaited_once()
+
+
+async def test_newest_id_tracks_latest_date():
+    proc, _, _ = _processor()
+    await proc.async_process([_comment("a2", "2026-10-13T12:00:02Z"), _comment("a1", "2026-10-13T12:00:01Z")])
+    assert proc.newest_id == "a2"
+
+
+async def test_memory_is_bounded():
+    proc, _, fired = _processor()
+    await proc.async_process([_comment(f"a{n:03}", f"2026-10-13T12:{n // 60:02}:{n % 60:02}Z") for n in range(250)])
+    await proc.async_process([_comment("a000", "2026-10-13T12:00:00Z")])  # forgotten after 200 → fires again
+    assert len(fired) == 251
+
+
+async def test_listener_removal():
+    proc, _, fired = _processor()
+    remove = proc.add_listener(lambda *_: fired.append(("extra", "")))
+    remove()
+    await proc.async_process([_comment("a1", "2026-10-13T12:00:01Z")])
+    assert fired == [("comment_added", "a1")]

@@ -1,6 +1,8 @@
 """Trello actions → Home Assistant events. No Home Assistant imports."""
 from __future__ import annotations
 
+from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -148,3 +150,56 @@ def map_action(action: dict[str, Any], ctx: ActionContext) -> tuple[str, dict[st
         case "attachment_added":
             attrs["attachment"] = (data.get("attachment") or {}).get("name")
     return event_type, attrs
+
+
+class ActivityProcessor:
+    """One per board: drops duplicate actions (webhook and feed overlap), fires events oldest first,
+    and asks for one board refresh per batch that contained anything new."""
+
+    MEMORY = 200
+
+    def __init__(self, context: Callable[[], ActionContext], refresh: Callable[[], Awaitable[None]]) -> None:
+        self._context = context
+        self._refresh = refresh
+        self._seen: deque[str] = deque()
+        self._seen_set: set[str] = set()
+        self._listeners: list[Callable[[str, dict[str, Any]], None]] = []
+        self._newest_date = ""
+        self.newest_id: str | None = None
+        self.baselined = False
+
+    def add_listener(self, listener: Callable[[str, dict[str, Any]], None]) -> Callable[[], None]:
+        self._listeners.append(listener)
+        return lambda: self._listeners.remove(listener)
+
+    def _remember(self, action: dict[str, Any]) -> bool:
+        """Record an action; False if it was already seen."""
+        action_id = action.get("id")
+        if not action_id or action_id in self._seen_set:
+            return False
+        self._seen.append(action_id)
+        self._seen_set.add(action_id)
+        if len(self._seen) > self.MEMORY:
+            self._seen_set.discard(self._seen.popleft())
+        date = action.get("date") or ""
+        if date >= self._newest_date:
+            self._newest_date = date
+            self.newest_id = action_id
+        return True
+
+    def set_baseline(self, actions: list[dict[str, Any]]) -> None:
+        """Mark existing activity as seen without firing anything: no replay after a restart."""
+        for action in actions:
+            self._remember(action)
+        self.baselined = True
+
+    async def async_process(self, actions: list[dict[str, Any]]) -> None:
+        new = [a for a in sorted(actions, key=lambda a: a.get("date") or "") if self._remember(a)]
+        if not new:
+            return
+        context = self._context()
+        for action in new:
+            if mapped := map_action(action, context):
+                for listener in list(self._listeners):
+                    listener(*mapped)
+        await self._refresh()
