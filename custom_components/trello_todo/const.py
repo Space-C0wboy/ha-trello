@@ -33,5 +33,6 @@ MAX_ITEMS_ATTRIBUTE: Final = 25
 MODE_WEBHOOK: Final = "webhook"
 MODE_FEED: Final = "feed"
 CONF_WEBHOOKS: Final = "webhooks"
+CONF_RETIRED_WEBHOOKS: Final = "retired_webhooks"
 FEED_INTERVAL_SECONDS: Final = 60
 WEBHOOK_REFRESH_MINUTES: Final = 15

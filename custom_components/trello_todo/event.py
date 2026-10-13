@@ -75,7 +75,8 @@ class TrelloActivityEvent(CoordinatorEntity[TrelloBoardCoordinator], EventEntity
 
     @property
     def available(self) -> bool:
-        return super().available and self.coordinator.data is not None
+        # Not CoordinatorEntity.available: a 429/5xx refresh must not swallow events arriving meanwhile.
+        return self.coordinator.data is not None and not self.coordinator.inaccessible
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

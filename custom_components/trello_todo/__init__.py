@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 from homeassistant.const import Platform
@@ -60,8 +61,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
     for coordinator in boards.values():
         entry.async_on_unload(coordinator.async_stop_feed)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    await manager.async_setup(boards.values())
     entry.async_on_unload(manager.async_unload)
+    await manager.async_setup(boards.values())
     return True
 
 
@@ -91,11 +92,14 @@ async def async_remove_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> N
         return
     try:
         implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(hass, entry)
-        session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
+        token = dict(entry.data["token"])
 
         async def get_token() -> str:
-            await session.async_ensure_token_valid()
-            return session.token["access_token"]
+            # The entry is already gone, so OAuth2Session could not persist a refresh: refresh in memory.
+            nonlocal token
+            if token.get("expires_at", 0) < time.time() + 30:
+                token = await implementation.async_refresh_token(token)
+            return token["access_token"]
 
         manager = WebhookManager(hass, entry, TrelloClient(async_get_clientsession(hass), get_token), "")
         for board_id in list(states):

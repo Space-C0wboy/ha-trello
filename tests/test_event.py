@@ -77,9 +77,18 @@ async def test_source_follows_mode(hass, loaded):
     assert hass.states.get(EVENT).attributes["source"] == "webhook"
 
 
-async def test_unavailable_with_board(hass, loaded, mock_trello):
+async def test_stays_available_on_transient_error(hass, loaded, mock_trello):
+    """I6: a 5xx/429 on the board refresh must not swallow events."""
     mock_trello.clear()
     mock_trello.get(BOARD_URL, status=500)
+    await _coordinator(loaded).async_refresh()
+    await hass.async_block_till_done()
+    assert hass.states.get(EVENT).state != "unavailable"
+
+
+async def test_unavailable_when_board_inaccessible(hass, loaded, mock_trello):
+    mock_trello.clear()
+    mock_trello.get(BOARD_URL, status=404, body="board not found")
     await _coordinator(loaded).async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get(EVENT).state == "unavailable"

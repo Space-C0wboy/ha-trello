@@ -76,6 +76,7 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
         self.done_behavior: str = subentry.data[CONF_DONE_BEHAVIOR]
         self.done_list: str | None = subentry.data.get(CONF_DONE_LIST)
         self._issue_id = f"board_inaccessible_{self.board_id}"
+        self.inaccessible = False
         self._scan_interval = timedelta(seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
         self.mode = MODE_FEED
         self.processor = ActivityProcessor(self._activity_context, self.async_request_refresh)
@@ -147,6 +148,7 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
         except TrelloAuthError as err:
             raise ConfigEntryAuthFailed(str(err)) from err
         except TrelloAccessError as err:
+            self.inaccessible = True
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -161,6 +163,7 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
             raise UpdateFailed(str(err), retry_after=err.retry_after or DEFAULT_RATE_LIMIT_BACKOFF) from err
         except TrelloError as err:
             raise UpdateFailed(str(err)) from err
+        self.inaccessible = False
         ir.async_delete_issue(self.hass, DOMAIN, self._issue_id)
         if board.name and board.name != self.board_title:
             self._rename(board.name)
