@@ -13,7 +13,7 @@ from .api import TrelloAccessError, TrelloClient
 from .const import CONF_BOARD_ID, DOMAIN, MODE_FEED, SUBENTRY_BOARD
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry, TrelloRuntimeData
 
-PLATFORMS: list[Platform] = [Platform.TODO]
+PLATFORMS: list[Platform] = [Platform.TODO, Platform.EVENT]
 
 
 def _board_settings(entry: TrelloConfigEntry) -> dict[str, dict[str, Any]]:

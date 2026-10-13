@@ -11,6 +11,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -75,6 +76,16 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
         self.mode = MODE_FEED
         self.processor = ActivityProcessor(self._activity_context, self.async_request_refresh)
         self._feed_unsub: CALLBACK_TYPE | None = None
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.board_id)},
+            name=self.data.name if self.data else self.board_title,
+            manufacturer="Trello",
+            entry_type=DeviceEntryType.SERVICE,
+            configuration_url=f"https://trello.com/b/{self.board_id}",
+        )
 
     def _activity_context(self) -> ActionContext:
         board = self.data

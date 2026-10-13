@@ -19,7 +19,6 @@ from homeassistant.exceptions import (
     ServiceValidationError,
 )
 from homeassistant.helpers import entity_registry as er
-from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util, slugify
@@ -139,13 +138,7 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
         self._list_id = list_id
         board = coordinator.data
         self._attr_unique_id = list_id
-        self._attr_device_info = DeviceInfo(
-            identifiers={(DOMAIN, board.id)},
-            name=board.name,
-            manufacturer="Trello",
-            entry_type=DeviceEntryType.SERVICE,
-            configuration_url=f"https://trello.com/b/{board.id}",
-        )
+        self._attr_device_info = coordinator.device_info
         # Entity ids follow the list name alone (todo.chores), not "<board> <list>".
         # slugify() returns "unknown" for names with no sluggable characters; let HA name those.
         slug = slugify(board.lists[list_id])
