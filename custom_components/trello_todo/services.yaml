@@ -1,0 +1,310 @@
+create_card:
+  fields:
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    board:
+      selector:
+        text: {}
+    list:
+      selector:
+        text: {}
+    name:
+      selector:
+        text: {}
+      required: true
+    description:
+      selector:
+        text:
+          multiline: true
+    due:
+      selector:
+        text: {}
+      example: 2026-10-20 or 2026-10-20 09:15
+    labels:
+      selector:
+        text:
+          multiple: true
+    members:
+      selector:
+        text:
+          multiple: true
+    position:
+      selector:
+        select:
+          options:
+          - top
+          - bottom
+      default: bottom
+copy_card:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    list:
+      selector:
+        text: {}
+      required: true
+    board:
+      selector:
+        text: {}
+    name:
+      selector:
+        text: {}
+    keep:
+      selector:
+        select:
+          options:
+          - all
+          - checklists
+          - labels
+          - members
+          - due
+          - none
+      default: all
+    position:
+      selector:
+        select:
+          options:
+          - top
+          - bottom
+      default: bottom
+move_card:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    list:
+      selector:
+        text: {}
+      required: true
+    board:
+      selector:
+        text: {}
+    position:
+      selector:
+        select:
+          options:
+          - top
+          - bottom
+      default: top
+archive_card:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+restore_card:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+add_comment:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    text:
+      selector:
+        text:
+          multiline: true
+      required: true
+add_label:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    label:
+      selector:
+        text: {}
+      required: true
+remove_label:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    label:
+      selector:
+        text: {}
+      required: true
+assign_member:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    member:
+      selector:
+        text: {}
+      required: true
+unassign_member:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    member:
+      selector:
+        text: {}
+      required: true
+add_checklist_item:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    item:
+      selector:
+        text: {}
+      required: true
+    checklist:
+      selector:
+        text: {}
+      default: Checklist
+set_checklist_item:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    item:
+      selector:
+        text: {}
+      required: true
+    checked:
+      selector:
+        boolean: {}
+      required: true
+    checklist:
+      selector:
+        text: {}
+set_due:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}
+    due:
+      selector:
+        text: {}
+      example: 2026-10-20 or 2026-10-20 09:15
+    due_complete:
+      selector:
+        boolean: {}

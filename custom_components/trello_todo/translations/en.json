@@ -234,5 +234,345 @@
         }
       }
     }
+  },
+  "services": {
+    "create_card": {
+      "name": "Create card",
+      "description": "Create a Trello card.",
+      "fields": {
+        "entity_id": {
+          "name": "To-do list",
+          "description": "The Trello to-do list to create the card in."
+        },
+        "board": {
+          "name": "Board",
+          "description": "Board name or id. Only needed with several boards, or to move or copy to another board."
+        },
+        "list": {
+          "name": "List",
+          "description": "List name or id (instead of the to-do list)."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Card name."
+        },
+        "description": {
+          "name": "Description",
+          "description": "Card description."
+        },
+        "due": {
+          "name": "Due",
+          "description": "Date (local midnight) or date and time."
+        },
+        "labels": {
+          "name": "Labels",
+          "description": "Label names, ids, or colours (for unnamed labels)."
+        },
+        "members": {
+          "name": "Members",
+          "description": "Board members' full names, usernames or ids."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Top or bottom of the list."
+        }
+      }
+    },
+    "copy_card": {
+      "name": "Copy card",
+      "description": "Copy a Trello card to a list.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "list": {
+          "name": "List",
+          "description": "List name or id to copy into."
+        },
+        "board": {
+          "name": "Board",
+          "description": "Board name or id. Only needed with several boards, or to move or copy to another board."
+        },
+        "name": {
+          "name": "Name",
+          "description": "Name for the copy (default: same name)."
+        },
+        "keep": {
+          "name": "Keep",
+          "description": "What to copy from the original card."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Top or bottom of the list."
+        }
+      }
+    },
+    "move_card": {
+      "name": "Move card",
+      "description": "Move a Trello card to another list (or board).",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "list": {
+          "name": "List",
+          "description": "List name or id to move to."
+        },
+        "board": {
+          "name": "Board",
+          "description": "Board name or id. Only needed with several boards, or to move or copy to another board."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Top or bottom of the list."
+        }
+      }
+    },
+    "archive_card": {
+      "name": "Archive card",
+      "description": "Archive a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        }
+      }
+    },
+    "restore_card": {
+      "name": "Restore card",
+      "description": "Restore an archived Trello card (needs the card id or link).",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        }
+      }
+    },
+    "add_comment": {
+      "name": "Add comment",
+      "description": "Comment on a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "text": {
+          "name": "Text",
+          "description": "Comment text."
+        }
+      }
+    },
+    "add_label": {
+      "name": "Add label",
+      "description": "Add a label to a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "label": {
+          "name": "Label",
+          "description": "Label name, id, or colour (for an unnamed label)."
+        }
+      }
+    },
+    "remove_label": {
+      "name": "Remove label",
+      "description": "Remove a label from a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "label": {
+          "name": "Label",
+          "description": "Label name, id, or colour (for an unnamed label)."
+        }
+      }
+    },
+    "assign_member": {
+      "name": "Assign member",
+      "description": "Add a board member to a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "member": {
+          "name": "Member",
+          "description": "Board member's full name, username or id."
+        }
+      }
+    },
+    "unassign_member": {
+      "name": "Unassign member",
+      "description": "Remove a member from a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "member": {
+          "name": "Member",
+          "description": "Board member's full name, username or id."
+        }
+      }
+    },
+    "add_checklist_item": {
+      "name": "Add checklist item",
+      "description": "Add an item to a checklist on a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "item": {
+          "name": "Item",
+          "description": "Checklist item text."
+        },
+        "checklist": {
+          "name": "Checklist",
+          "description": "Checklist name (created if missing)."
+        }
+      }
+    },
+    "set_checklist_item": {
+      "name": "Set checklist item",
+      "description": "Check or uncheck a checklist item on a Trello card.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "item": {
+          "name": "Item",
+          "description": "Checklist item name (or id)."
+        },
+        "checked": {
+          "name": "Checked",
+          "description": "Checked or not."
+        },
+        "checklist": {
+          "name": "Checklist",
+          "description": "Only look in this checklist."
+        }
+      }
+    },
+    "set_due": {
+      "name": "Set due date",
+      "description": "Set, clear or complete a Trello card's due date.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        },
+        "due": {
+          "name": "Due",
+          "description": "Date (local midnight) or date and time; empty clears it."
+        },
+        "due_complete": {
+          "name": "Due complete",
+          "description": "Mark the due date complete or not."
+        }
+      }
+    }
   }
 }

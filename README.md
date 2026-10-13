@@ -16,6 +16,7 @@ A [HACS](https://hacs.xyz/) custom integration for [Trello](https://trello.com/)
 - **Check items off:** each board decides what checking off does: move the card to a done list, archive it, or both. Cards in the done list show as completed.
 - **Edit from Home Assistant:** add cards, rename them, set due dates and descriptions, and re-order them.
 - **Safe deletes:** deleting an item archives the card. Nothing is ever hard-deleted.
+- **Actions for automations:** create, move, copy, archive, comment, label, assign, checklists and due dates, using names rather than ids.
 - **Trello events for automations:** comments, moves, due dates, assignments and more fire events on an `event` entity per board — within seconds with Nabu Casa or a public HTTPS URL, within a minute otherwise.
 - **Dashboard-friendly attributes:** card names, due dates, labels and members are available in state attributes.
 - **No extra dependencies:** uses only `aiohttp`, which is already bundled with Home Assistant.
@@ -199,6 +200,97 @@ A card landed in the done list: use `event_type` `card_moved` with `to_done_list
 
 ---
 
+## Actions
+
+Automations and scripts can change Trello with these actions. You'll find them under **Developer tools → Actions** and in the automation editor.
+
+| Action | What it does |
+|--------|--------------|
+| `trello_todo.create_card` | Create a card, with an optional description, due date, labels, members and position |
+| `trello_todo.copy_card` | Copy a card to a list, optionally keeping only some of its parts (`keep`) |
+| `trello_todo.move_card` | Move a card to another list, or to another board |
+| `trello_todo.archive_card` / `restore_card` | Archive or restore a card |
+| `trello_todo.add_comment` | Comment on a card |
+| `trello_todo.add_label` / `remove_label` | Add or remove a label |
+| `trello_todo.assign_member` / `unassign_member` | Add or remove a member |
+| `trello_todo.add_checklist_item` | Add an item to a checklist; the checklist is created if it doesn't exist |
+| `trello_todo.set_checklist_item` | Check or uncheck a checklist item |
+| `trello_todo.set_due` | Set, clear or complete a due date |
+
+**Which card.** Every action except `create_card` needs one of these:
+- `card`: the card's id, short link or URL. Trello events provide it as `card_id` and `card_url`.
+- `entity_id` together with `card_name`: a Trello to-do list and the card's name in it. This only finds open cards.
+
+**Names, not ids.** Give boards, lists, labels and members by name, matched case-insensitively. Their Trello ids work too.
+- A label without a name can be given by its colour, for example `green`.
+- A member can be given by full name or username.
+- If a name matches more than one thing, the action fails with a clear error rather than guessing.
+
+**Safe to repeat.** Adding a label or member that's already on the card, or removing one that isn't, counts as success.
+
+**Results.** Add `response_variable` to use the card's details in later steps: `card_id`, `card_url`, `card_name`, `list_name` and `board_name`. `add_comment` also returns `comment_id`.
+
+### Example: comment when a card reaches the done list
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: event.household_activity
+conditions:
+  - condition: state
+    entity_id: event.household_activity
+    attribute: event_type
+    state: card_moved
+  - condition: state
+    entity_id: event.household_activity
+    attribute: to_done_list
+    state: true
+actions:
+  - action: trello_todo.add_comment
+    data:
+      card: "{{ trigger.to_state.attributes.card_id }}"
+      text: "Done ✅"
+```
+
+### Example: check off a checklist item when a package arrives
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.package_delivered
+    to: "on"
+actions:
+  - action: trello_todo.set_checklist_item
+    data:
+      entity_id: todo.chores
+      card_name: Order furnace filters
+      item: Delivered
+      checked: true
+```
+
+### Example: create a card from a recurring calendar event
+
+Add a recurring event, such as "Replace furnace filter" every 90 days, to a local calendar. Then:
+
+```yaml
+triggers:
+  - trigger: calendar
+    entity_id: calendar.home_maintenance
+    event: start
+actions:
+  - action: trello_todo.create_card
+    data:
+      entity_id: todo.chores
+      name: "{{ trigger.calendar_event.summary }}"
+      due: "{{ now().date() + timedelta(days=7) }}"
+    response_variable: created
+  - action: notify.notify
+    data:
+      message: "Added {{ created.card_name }}: {{ created.card_url }}"
+```
+
+---
+
 ## Data & Refresh
 
 Each board runs in one of two modes, shown in the event entity's `source` attribute:
@@ -243,10 +335,10 @@ Each board runs in one of two modes, shown in the event entity's `source` attrib
 ## Limits
 
 These are not supported yet:
-- Checklists, comments and attachments
-- Editing labels or members
-- Moving cards between ordinary lists
+- Attachments
+- Creating or editing labels (adding existing labels to cards works)
 - Creating boards or lists
+- Moving cards between lists from the to-do panel (use `trello_todo.move_card` instead)
 
 ---
 
