@@ -55,6 +55,8 @@ class TrelloDueCalendar(CoordinatorEntity[TrelloBoardCoordinator], CalendarEntit
     _attr_has_entity_name = True
     _attr_translation_key = "due_dates"
     _attr_supported_features = CalendarEntityFeature.UPDATE_EVENT | CalendarEntityFeature.DELETE_EVENT
+    # Card descriptions can be long; keep them out of history.
+    _unrecorded_attributes = frozenset({"description"})
 
     def __init__(self, coordinator: TrelloBoardCoordinator) -> None:
         super().__init__(coordinator)
@@ -104,11 +106,15 @@ class TrelloDueCalendar(CoordinatorEntity[TrelloBoardCoordinator], CalendarEntit
     ) -> None:
         card = self._card(uid)
         start, end = event.get(EVENT_START), event.get(EVENT_END)
-        if not isinstance(start, datetime) or not isinstance(end, datetime) or start >= end:
+        if not isinstance(start, datetime) or not isinstance(end, datetime):
+            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_event_times")
+        # In UTC: same-zone local times compare by wall clock, which is wrong across the fall-back hour.
+        start, end = dt_util.as_utc(start), dt_util.as_utc(end)
+        if start >= end:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_event_times")
         fields = {
-            "due": dt_util.as_utc(end).isoformat(),
-            "start": None if end - start == DEFAULT_LENGTH else dt_util.as_utc(start).isoformat(),
+            "due": end.isoformat(),
+            "start": None if end - start == DEFAULT_LENGTH else start.isoformat(),
         }
         await self._write(card, fields)
 
@@ -122,5 +128,5 @@ class TrelloDueCalendar(CoordinatorEntity[TrelloBoardCoordinator], CalendarEntit
             self.coordinator,
             lambda client: client.update_card(card.id, fields),
             lambda board, _: apply_card_fields(board, card, fields),
-            card=card.id,
+            card=card.name or card.id,
         )

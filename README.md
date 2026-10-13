@@ -265,7 +265,7 @@ Each card is counted by at most one sensor. The sensors update within a minute a
 How many cards are due today for Sam:
 
 ```yaml
-{{ state_attr('sensor.household_due_today', 'by_member').get('Sam', 0) }}
+{{ (state_attr('sensor.household_due_today', 'by_member') or {}).get('Sam', 0) }}
 ```
 
 ---

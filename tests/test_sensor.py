@@ -2,6 +2,7 @@
 import time
 
 import pytest
+from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
@@ -139,3 +140,43 @@ async def test_unavailable_when_board_inaccessible(hass, sensors, mock_trello):
     await sensors.runtime_data.boards[subentry_id(sensors, "b1")].async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get(OVERDUE).state == "unavailable"
+
+
+# --- small-issue fixes ----------------------------------------------------------------------------
+
+
+async def test_unchanged_tick_writes_nothing(hass, load_entry, freezer):
+    # Without "Week edge": it would legitimately enter the 7-day window as the clock moves.
+    entry = await load_entry(b1=board(cards=[c for c in CARDS if c["id"] != "s2"]), expires_at=LONG_TOKEN)
+    _no_refresh_schedule(entry)
+    written = []
+
+    @callback
+    def _ours(event_data) -> bool:
+        return event_data["entity_id"].startswith("sensor.household_")
+
+    @callback
+    def _seen(event) -> None:
+        written.append(event.data["entity_id"])
+
+    for event_type in ("state_changed", "state_reported"):  # reported = written again with the same state
+        hass.bus.async_listen(event_type, _seen, event_filter=_ours)
+    freezer.tick(65)
+    await _tick(hass)
+    assert written == []
+
+
+async def test_buckets_computed_once_per_board(hass, sensors, freezer):
+    from unittest.mock import patch
+
+    from custom_components.trello_todo import sensor as sensor_module
+
+    _no_refresh_schedule(sensors)
+    with patch.object(sensor_module, "due_buckets", wraps=sensor_module.due_buckets) as spy:
+        freezer.tick(65)
+        await _tick(hass)
+        assert spy.call_count == 1  # one tick, four sensors
+        spy.reset_mock()
+        await sensors.runtime_data.boards[subentry_id(sensors, "b1")].async_refresh()
+        await hass.async_block_till_done()
+        assert spy.call_count == 1  # one refresh, four sensors

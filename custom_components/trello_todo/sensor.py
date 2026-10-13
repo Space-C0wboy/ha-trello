@@ -29,12 +29,20 @@ async def async_setup_entry(
     hass: HomeAssistant, entry: TrelloConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
 ) -> None:
     for subentry_id, coordinator in entry.runtime_data.boards.items():
+        due = _BoardDue(coordinator)
+        # Registered before the sensors' own listeners, so a board update invalidates first, then they recompute.
+        entry.async_on_unload(coordinator.async_add_listener(due.invalidate))
+        entry.async_on_unload(
+            async_track_time_interval(
+                hass, due.tick, TICK, name=f"trello due {coordinator.board_title}", cancel_on_shutdown=True
+            )
+        )
         add_when_loaded(
             entry,
             subentry_id,
             coordinator,
             async_add_entities,
-            lambda c: [*(TrelloDueCountSensor(c, key) for key in COUNT_KEYS), TrelloNextDueSensor(c)],
+            lambda c, due=due: [*(TrelloDueCountSensor(c, due, key) for key in COUNT_KEYS), TrelloNextDueSensor(c, due)],
         )
 
 
@@ -63,13 +71,39 @@ def _members(board: TrelloBoard, card: TrelloCard) -> list[str]:
     return [board.members.get(member_id, "") for member_id in card.member_ids]
 
 
+class _BoardDue:
+    """One board's due buckets, shared by its four sensors: computed once per board update and once a minute."""
+
+    def __init__(self, coordinator: TrelloBoardCoordinator) -> None:
+        self._coordinator = coordinator
+        self._buckets: dict[str, Bucket] | None = None
+        self.sensors: list[_DueSensor] = []
+
+    @callback
+    def invalidate(self) -> None:
+        self._buckets = None
+
+    def buckets(self) -> dict[str, Bucket] | None:
+        if self._buckets is None and (board := self._coordinator.data) is not None:
+            self._buckets = due_buckets(board, self._coordinator.done_list, dt_util.utcnow())
+        return self._buckets
+
+    @callback
+    def tick(self, _now: datetime) -> None:
+        """Time moves cards between windows even when nothing changes in Trello."""
+        self._buckets = None
+        for sensor in list(self.sensors):
+            sensor.async_tick()
+
+
 class _DueSensor(CoordinatorEntity[TrelloBoardCoordinator], SensorEntity):
-    """Recomputes from cached cards on every board update and once a minute (time moves cards between windows)."""
+    """Recomputes from the board's shared buckets on every board update and once a minute."""
 
     _attr_has_entity_name = True
 
-    def __init__(self, coordinator: TrelloBoardCoordinator, key: str) -> None:
+    def __init__(self, coordinator: TrelloBoardCoordinator, due: _BoardDue, key: str) -> None:
         super().__init__(coordinator)
+        self._due = due
         self._key = key
         self._attr_translation_key = key
         self._attr_unique_id = f"{coordinator.board_id}_{key}"
@@ -82,14 +116,11 @@ class _DueSensor(CoordinatorEntity[TrelloBoardCoordinator], SensorEntity):
 
     async def async_added_to_hass(self) -> None:
         await super().async_added_to_hass()
-        self.async_on_remove(
-            async_track_time_interval(
-                self.hass, self._tick, TICK, name=f"trello due {self._attr_unique_id}", cancel_on_shutdown=True
-            )
-        )
+        self._due.sensors.append(self)
+        self.async_on_remove(lambda: self._due.sensors.remove(self))
 
     @callback
-    def _tick(self, _now: datetime) -> None:
+    def async_tick(self) -> None:
         before = (self._attr_native_value, self._attr_extra_state_attributes)
         self._recompute()
         if (self._attr_native_value, self._attr_extra_state_attributes) != before:
@@ -102,9 +133,9 @@ class _DueSensor(CoordinatorEntity[TrelloBoardCoordinator], SensorEntity):
 
     def _recompute(self) -> None:
         board = self.coordinator.data
-        if board is None:
+        if board is None or (buckets := self._due.buckets()) is None:
             return
-        self._update(board, due_buckets(board, self.coordinator.done_list, dt_util.utcnow()))
+        self._update(board, buckets)
 
     def _update(self, board: TrelloBoard, buckets: dict[str, Bucket]) -> None:
         raise NotImplementedError
@@ -139,8 +170,8 @@ class TrelloDueCountSensor(_DueSensor):
 class TrelloNextDueSensor(_DueSensor):
     _attr_device_class = SensorDeviceClass.TIMESTAMP
 
-    def __init__(self, coordinator: TrelloBoardCoordinator) -> None:
-        super().__init__(coordinator, "next_due")
+    def __init__(self, coordinator: TrelloBoardCoordinator, due: _BoardDue) -> None:
+        super().__init__(coordinator, due, "next_due")
 
     def _update(self, board: TrelloBoard, buckets: dict[str, Bucket]) -> None:
         if not (upcoming := buckets["upcoming"]):

@@ -194,3 +194,28 @@ async def test_unavailable_when_board_inaccessible(hass, cal, mock_trello):
     await cal.runtime_data.boards[subentry_id(cal, "b1")].async_refresh()
     await hass.async_block_till_done()
     assert hass.states.get(CAL).state == "unavailable"
+
+
+# --- small-issue fixes ----------------------------------------------------------------------------
+
+
+async def test_update_across_fall_back_hour(hass, cal, mock_trello):
+    """01:40 CDT -> 01:10 CST is 30 real minutes: compare in UTC, not wall-clock time."""
+    mock_trello.put(f"{API}/cards/c1", payload={})
+    start = dt_util.as_local(dt_util.parse_datetime("2026-11-01T06:40:00+00:00"))
+    end = dt_util.as_local(dt_util.parse_datetime("2026-11-01T07:10:00+00:00"))
+    assert start.tzinfo is end.tzinfo and start.replace(tzinfo=None) > end.replace(tzinfo=None)
+    await _entity(hass).async_update_event("c1", {"dtstart": start, "dtend": end})
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"due": "2026-11-01T07:10:00+00:00", "start": None}]
+
+
+async def test_card_not_found_names_the_card(hass, cal, mock_trello):
+    mock_trello.put(f"{API}/cards/c1", status=404, body="not found")
+    with pytest.raises(ServiceValidationError) as info:
+        await _entity(hass).async_delete_event("c1")
+    assert info.value.translation_placeholders == {"card": "Pay bill"}
+
+
+async def test_description_not_recorded(hass, cal):
+    """Card descriptions can be long; the calendar's `description` attribute stays out of history."""
+    assert "description" in _entity(hass)._unrecorded_attributes
