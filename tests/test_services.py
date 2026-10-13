@@ -1,0 +1,227 @@
+"""Tests for the trello_todo actions."""
+import pytest
+import voluptuous as vol
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
+
+from custom_components.trello_todo.const import DOMAIN
+
+from .common import API, LISTS_B2, board, board_subentry, bodies, calls, card, card_url
+
+INFO = {
+    "card_id": "c1",
+    "card_url": "https://trello.com/c/c1",
+    "card_name": "Buy stamps",
+    "list_id": "l_done",
+    "list_name": "Done & Archive",
+    "board_id": "b1",
+    "board_name": "Household",
+}
+
+
+async def _call(hass, service, data, response=False):
+    return await hass.services.async_call(DOMAIN, service, data, blocking=True, return_response=response)
+
+
+def _board_requests(mock, board_id="b1"):
+    return len(calls(mock, "GET", f"{API}/boards/{board_id}"))
+
+
+def _card_get(mock_trello, card_id="c1", board_id="b1", list_id="l_alex", name="Buy stamps"):
+    mock_trello.get(
+        card_url(card_id),
+        payload={"id": card_id, "idBoard": board_id, "idList": list_id, "name": name,
+                 "shortUrl": f"https://trello.com/c/{card_id}", "closed": False},
+    )
+
+
+async def test_actions_registered(hass, loaded):
+    for name in ("create_card", "copy_card", "move_card", "archive_card", "restore_card", "set_due"):
+        assert hass.services.has_service(DOMAIN, name)
+
+
+async def test_create_card_in_todo_entity(hass, loaded, mock_trello):
+    mock_trello.post(f"{API}/cards", payload=card("new", "Milk", "l_alex", 99))
+    before = _board_requests(mock_trello)
+    result = await _call(hass, "create_card", {"entity_id": "todo.alex", "name": "Milk"}, response=True)
+    assert bodies(mock_trello, "POST", f"{API}/cards") == [{"idList": "l_alex", "name": "Milk", "pos": "bottom"}]
+    assert result == {**INFO, "card_id": "new", "card_url": "https://trello.com/c/new", "card_name": "Milk",
+                      "list_id": "l_alex", "list_name": "Alex"}
+    assert _board_requests(mock_trello) == before + 1
+
+
+async def test_create_card_by_list_name_with_everything(hass, loaded, mock_trello):
+    mock_trello.post(f"{API}/cards", payload=card("new", "Fix", "l_sam", 99))
+    await _call(hass, "create_card", {
+        "list": "sam", "name": "Fix", "description": "x", "due": "2026-10-20",
+        "labels": ["urgent", "green"], "members": ["alex"], "position": "top",
+    })
+    assert bodies(mock_trello, "POST", f"{API}/cards") == [{
+        "idList": "l_sam", "name": "Fix", "pos": "top", "desc": "x", "due": "2026-10-20T05:00:00+00:00",
+        "idLabels": "lb1,lb2", "idMembers": "m2",
+    }]
+
+
+async def test_create_card_needs_a_target(hass, loaded):
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "create_card", {"name": "Milk"})
+    assert info.value.translation_key == "list_required"
+
+
+async def test_create_card_target_conflict(hass, loaded):
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "create_card", {"entity_id": "todo.alex", "list": "Sam", "name": "Milk"})
+    assert info.value.translation_key == "create_target_conflict"
+
+
+async def test_create_card_unknown_list(hass, loaded):
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "create_card", {"list": "Dones", "name": "Milk"})
+    assert info.value.translation_key == "list_not_found"
+    assert info.value.translation_placeholders == {"value": "Dones", "board": "Household"}
+
+
+async def test_create_card_board_required_with_two_boards(hass, load_entry):
+    await load_entry(board_subentry(), board_subentry("b2", "Projects", "archive", None))
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "create_card", {"list": "Alex", "name": "Milk"})
+    assert info.value.translation_key == "board_required"
+
+
+async def test_move_card_by_card_id(hass, loaded, mock_trello):
+    """Review Focus 1: event card_id passes straight in."""
+    _card_get(mock_trello)
+    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_done", 1))
+    result = await _call(hass, "move_card", {"card": "c1", "list": "Done & Archive"}, response=True)
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"idList": "l_done", "pos": "top"}]
+    assert result == INFO
+
+
+async def test_move_card_by_url(hass, loaded, mock_trello):
+    _card_get(mock_trello, card_id="abc12345")
+    mock_trello.put(f"{API}/cards/abc12345", payload=card("abc12345", "X", "l_done", 1))
+    await _call(hass, "move_card", {"card": "https://trello.com/c/abc12345/7-x", "list": "Done & Archive"})
+    assert len(calls(mock_trello, "GET", f"{API}/cards/abc12345")) == 1
+
+
+async def test_move_card_by_entity_and_name(hass, loaded, mock_trello):
+    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_sam", 1))
+    await _call(hass, "move_card", {"entity_id": "todo.alex", "card_name": "buy stamps", "list": "Sam", "position": "bottom"})
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"idList": "l_sam", "pos": "bottom"}]
+
+
+async def test_move_card_to_other_board(hass, load_entry, mock_trello):
+    """Review Focus 5: both boards refresh."""
+    await load_entry(board_subentry(), board_subentry("b2", "Projects", "archive", None))
+    _card_get(mock_trello)
+    venues = LISTS_B2[0]["id"]
+    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", venues, 1))
+    b1, b2 = _board_requests(mock_trello, "b1"), _board_requests(mock_trello, "b2")
+    await _call(hass, "move_card", {"card": "c1", "board": "projects", "list": "Venues"})
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"idList": venues, "pos": "top", "idBoard": "b2"}]
+    assert _board_requests(mock_trello, "b1") == b1 + 1
+    assert _board_requests(mock_trello, "b2") == b2 + 1
+
+
+async def test_card_ref_both_or_neither_invalid(hass, loaded):
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "archive_card", {"card": "c1", "entity_id": "todo.alex", "card_name": "x"})
+    with pytest.raises(vol.Invalid):
+        await _call(hass, "archive_card", {})
+
+
+async def test_card_not_found(hass, loaded, mock_trello):
+    mock_trello.get(card_url("zz"), status=404, body="not found")
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "archive_card", {"card": "zz"})
+    assert info.value.translation_key == "card_not_found"
+
+
+async def test_card_on_unconfigured_board(hass, loaded, mock_trello):
+    _card_get(mock_trello, board_id="elsewhere")
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "archive_card", {"card": "c1"})
+    assert info.value.translation_key == "card_board_not_configured"
+
+
+async def test_card_name_ambiguous(hass, load_entry):
+    await load_entry(b1=board(cards=[card("d1", "Dup", "l_alex", 1), card("d2", "dup", "l_alex", 2)]))
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "archive_card", {"entity_id": "todo.alex", "card_name": "Dup"})
+    assert info.value.translation_key == "card_ambiguous"
+
+
+async def test_not_a_trello_list(hass, loaded):
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "archive_card", {"entity_id": "todo.shopping_list", "card_name": "x"})
+    assert info.value.translation_key == "not_a_trello_list"
+
+
+@pytest.mark.parametrize(("service", "closed"), [("archive_card", True), ("restore_card", False)])
+async def test_archive_and_restore(hass, loaded, mock_trello, service, closed):
+    _card_get(mock_trello)
+    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_alex", 1))
+    await _call(hass, service, {"card": "c1"})
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"closed": closed}]
+
+
+@pytest.mark.parametrize(("keep", "source"), [("all", "all"), ("none", ""), ("checklists", "checklists")])
+async def test_copy_card(hass, loaded, mock_trello, keep, source):
+    mock_trello.post(f"{API}/cards", payload=card("copy", "Buy stamps", "l_sam", 5))
+    result = await _call(hass, "copy_card", {"entity_id": "todo.alex", "card_name": "Buy stamps", "list": "Sam", "keep": keep}, response=True)
+    assert bodies(mock_trello, "POST", f"{API}/cards") == [
+        {"idList": "l_sam", "idCardSource": "c1", "keepFromSource": source, "pos": "bottom"}
+    ]
+    assert result["card_id"] == "copy"
+
+
+async def test_set_due_date_is_local_midnight(hass, loaded, mock_trello):
+    """Review Focus 4."""
+    mock_trello.put(f"{API}/cards/c3", payload=card("c3", "Pay invoice", "l_alex", 1))
+    await _call(hass, "set_due", {"entity_id": "todo.alex", "card_name": "Pay invoice", "due": "2026-10-20"})
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c3") == [{"due": "2026-10-20T05:00:00+00:00"}]
+
+
+@pytest.mark.parametrize(
+    ("data", "expected"),
+    [
+        ({"due": "2026-10-20 09:15:00"}, {"due": "2026-10-20T14:15:00+00:00"}),
+        ({"due": None}, {"due": None}),
+        ({"due": ""}, {"due": None}),
+        ({"due_complete": True}, {"dueComplete": True}),
+    ],
+)
+async def test_set_due_variants(hass, loaded, mock_trello, data, expected):
+    mock_trello.put(f"{API}/cards/c3", payload=card("c3", "Pay invoice", "l_alex", 1))
+    await _call(hass, "set_due", {"entity_id": "todo.alex", "card_name": "Pay invoice", **data})
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c3") == [expected]
+
+
+async def test_set_due_needs_something(hass, loaded):
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "set_due", {"entity_id": "todo.alex", "card_name": "Pay invoice"})
+    assert info.value.translation_key == "due_required"
+
+
+async def test_response_only_when_asked(hass, loaded, mock_trello):
+    _card_get(mock_trello)
+    mock_trello.put(f"{API}/cards/c1", payload=card("c1", "Buy stamps", "l_alex", 1))
+    assert await _call(hass, "archive_card", {"card": "c1"}) is None
+
+
+async def test_401_starts_reauth(hass, loaded, mock_trello):
+    _card_get(mock_trello)
+    mock_trello.put(f"{API}/cards/c1", status=401, body="invalid token")
+    with pytest.raises(HomeAssistantError) as info:
+        await _call(hass, "archive_card", {"card": "c1"})
+    assert info.value.translation_key == "auth_failed"
+    await hass.async_block_till_done()
+    assert [f["context"]["source"] for f in hass.config_entries.flow.async_progress()] == ["reauth"]
+
+
+async def test_server_error_reason_code(hass, loaded, mock_trello):
+    _card_get(mock_trello)
+    mock_trello.put(f"{API}/cards/c1", status=503, body="secret-ish upstream text")
+    with pytest.raises(HomeAssistantError) as info:
+        await _call(hass, "archive_card", {"card": "c1"})
+    assert info.value.translation_key == "api_error"
+    assert info.value.translation_placeholders == {"error": "connection"}

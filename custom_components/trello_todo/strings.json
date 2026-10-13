@@ -135,6 +135,69 @@
     },
     "no_return_list": {
       "message": "There is no other open list on this board to move the card back to."
+    },
+    "card_not_found": {
+      "message": "No Trello card {card} on a board set up in Home Assistant."
+    },
+    "card_board_not_configured": {
+      "message": "Trello card {card} is on a board that isn't set up in Home Assistant."
+    },
+    "card_ambiguous": {
+      "message": "{card} matches several cards: {matches}. Use the card's id or link instead."
+    },
+    "not_a_trello_list": {
+      "message": "{entity_id} is not a Trello to-do list."
+    },
+    "board_required": {
+      "message": "Several Trello boards are set up: say which one with `board`."
+    },
+    "board_unavailable": {
+      "message": "Trello board {board} isn't loaded right now."
+    },
+    "board_not_found": {
+      "message": "No Trello board named {value} is set up in Home Assistant."
+    },
+    "board_ambiguous": {
+      "message": "{value} matches several Trello boards."
+    },
+    "list_required": {
+      "message": "Say where to create the card: `entity_id` of a Trello to-do list, or `list`."
+    },
+    "create_target_conflict": {
+      "message": "Use either `entity_id` or `list`/`board`, not both."
+    },
+    "list_not_found": {
+      "message": "No list named {value} on {board}."
+    },
+    "list_ambiguous": {
+      "message": "{value} matches several lists on {board}; use the list id."
+    },
+    "label_not_found": {
+      "message": "No label named {value} on {board}."
+    },
+    "label_ambiguous": {
+      "message": "{value} matches several labels on {board}; use the label id."
+    },
+    "member_not_found": {
+      "message": "{value} is not a member of {board}."
+    },
+    "member_ambiguous": {
+      "message": "{value} matches several members of {board}; use the username."
+    },
+    "invalid_due": {
+      "message": "{value} is not a date or date and time."
+    },
+    "due_required": {
+      "message": "Give `due`, `due_complete`, or both."
+    },
+    "checklist_not_found": {
+      "message": "No checklist named {value} on this card."
+    },
+    "checklist_item_not_found": {
+      "message": "No checklist item named {value} on this card."
+    },
+    "checklist_item_ambiguous": {
+      "message": "{value} matches several checklist items; name the checklist or use the item id."
     }
   },
   "entity": {

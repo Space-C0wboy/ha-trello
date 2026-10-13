@@ -8,17 +8,28 @@ from typing import Any
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import config_entry_oauth2_flow, issue_registry as ir
+from homeassistant.helpers import config_entry_oauth2_flow, config_validation as cv, issue_registry as ir
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.typing import ConfigType
 
 from .api import TrelloAccessError, TrelloClient
 from .const import CONF_BOARD_ID, CONF_WEBHOOKS, DOMAIN, SUBENTRY_BOARD
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry, TrelloRuntimeData
+from .services import async_setup_services
 from .webhooks import WebhookManager
 
 _LOGGER = logging.getLogger(__name__)
 
 PLATFORMS: list[Platform] = [Platform.TODO, Platform.EVENT]
+
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Register the Trello actions once, for every account and board."""
+    async_setup_services(hass)
+    return True
 
 
 def _board_settings(entry: TrelloConfigEntry) -> dict[str, dict[str, Any]]:
