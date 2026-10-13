@@ -257,6 +257,8 @@ class WebhookManager:
     @callback
     def _create_failed(self, coordinator: TrelloBoardCoordinator, webhook_id: str, url: str, err: Exception) -> None:
         _LOGGER.debug("Creating the Trello webhook for %s failed: %s", coordinator.board_title, err)
+        if isinstance(err, TrelloAuthError):
+            self.entry.async_start_reauth(self.hass)
         self._save(coordinator.board_id, {"webhook_id": webhook_id, "callback_url": url})
         self._fail(coordinator, _reason(err))
 
@@ -287,6 +289,8 @@ class WebhookManager:
         except TrelloAccessError:
             return False
         except _API_ERRORS as err:
+            if isinstance(err, TrelloAuthError):
+                self.entry.async_start_reauth(self.hass)
             _LOGGER.debug("Could not check Trello webhook: %s", err)
             return None
         return bool(info.get("active")) and info.get("callbackURL") == url

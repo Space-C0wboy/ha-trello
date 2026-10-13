@@ -244,3 +244,11 @@ async def test_listener_removal():
     remove()
     await proc.async_process([_comment("a1", "2026-10-13T12:00:01Z")])
     assert fired == [("comment_added", "a1")]
+
+
+async def test_live_activity_counts_as_baseline():
+    """Webhook deliveries before any feed poll: a later fallback poll must process, not re-baseline."""
+    proc, _, fired = _processor()
+    await proc.async_process([_comment("a1", "2026-10-13T12:00:01Z")])
+    assert proc.baselined is True
+    assert fired == [("comment_added", "a1")]

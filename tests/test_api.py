@@ -183,3 +183,32 @@ async def test_get_actions_without_since(client, mock_trello):
     await client.get_actions("b1", None, ["createCard"])
     (req,) = calls(mock_trello, "GET", f"{API}/boards/b1/actions")
     assert "since" not in req.kwargs["params"]
+
+
+async def test_get_actions_pages_back_until_short_page(client, mock_trello):
+    """A full page (50) means there may be more since `since`: page back with `before`."""
+    first = [{"id": f"p{n:02}", "date": f"2026-10-13T12:{59 - n:02}:00Z"} for n in range(50)]
+    second = [{"id": "q00", "date": "2026-10-13T11:00:00Z"}]
+    mock_trello.get(actions_url("b1"), payload=first)
+    mock_trello.get(actions_url("b1"), payload=second)
+    result = await client.get_actions("b1", "a0", ["createCard"])
+    assert [a["id"] for a in result] == [a["id"] for a in first] + ["q00"]
+    reqs = calls(mock_trello, "GET", f"{API}/boards/b1/actions")
+    assert reqs[1].kwargs["params"]["before"] == "p49"
+    assert reqs[1].kwargs["params"]["since"] == "a0"
+
+
+async def test_get_actions_paging_is_capped(client, mock_trello):
+    page = [{"id": f"x{n}", "date": "2026-10-13T12:00:00Z"} for n in range(50)]
+    mock_trello.get(actions_url("b1"), payload=page, repeat=True)
+    result = await client.get_actions("b1", "a0", ["createCard"])
+    assert len(calls(mock_trello, "GET", f"{API}/boards/b1/actions")) == 5
+    assert len(result) == 250
+
+
+async def test_get_actions_without_since_does_not_page(client, mock_trello):
+    """The startup baseline only needs the newest page."""
+    page = [{"id": f"x{n}", "date": "2026-10-13T12:00:00Z"} for n in range(50)]
+    mock_trello.get(actions_url("b1"), payload=page, repeat=True)
+    await client.get_actions("b1", None, ["createCard"])
+    assert len(calls(mock_trello, "GET", f"{API}/boards/b1/actions")) == 1

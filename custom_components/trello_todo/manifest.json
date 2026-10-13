@@ -14,8 +14,8 @@
   ],
   "documentation": "https://github.com/Space-C0wboy/ha-trello",
   "integration_type": "service",
-  "iot_class": "cloud_polling",
+  "iot_class": "cloud_push",
   "issue_tracker": "https://github.com/Space-C0wboy/ha-trello/issues",
   "requirements": [],
-  "version": "0.3.1"
+  "version": "0.3.2"
 }

@@ -62,7 +62,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
         entry.async_on_unload(coordinator.async_stop_feed)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(manager.async_unload)
-    await manager.async_setup(boards.values())
+    # Cloudhooks + Trello's HEAD check per board can take seconds: don't hold up setup (boards start on the feed).
+    entry.async_create_task(hass, manager.async_setup(boards.values()), "trello webhooks setup")
     return True
 
 

@@ -77,3 +77,10 @@ async def test_failed_write_changes_nothing(hass, no_refresh, mock_trello):
     with pytest.raises(HomeAssistantError):
         await _service(hass, "update_item", {"item": "c1", "status": "completed"})
     assert hass.states.get(ALEX).state == "3"
+
+
+async def test_create_mirror_does_not_duplicate(hass, no_refresh, mock_trello):
+    """If a refresh already brought the new card in, the mirror must not add it twice."""
+    mock_trello.post(f"{API}/cards", payload=card("c1", "Buy stamps", "l_alex", 16384))
+    await _service(hass, "add_item", {"item": "Buy stamps"})
+    assert (await _uids(hass)).count("c1") == 1

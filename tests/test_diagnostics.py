@@ -22,6 +22,7 @@ async def test_diagnostics_redacts_tokens(hass, loaded):
         "lists": {"l_alex": "Alex", "l_sam": "Sam", "l_done": "Done & Archive"},
         "open_cards": {"l_alex": 3, "l_sam": 1, "l_done": 1},
         "mode": "feed",
+        "has_webhook": False,
         "webhook_failure": "no_public_url",
     }
     assert diag["webhooks"] == {"bad_signatures": 0}
@@ -58,3 +59,9 @@ async def test_diagnostics_webhook_state_redacted(hass, setup_credentials, mock_
     assert b1["webhook_failure"] is None
     assert diag["webhooks"]["bad_signatures"] == 0
     assert "ha.example.org" not in str(diag)
+
+
+async def test_diagnostics_show_webhook_presence(hass, loaded):
+    diag = await async_get_config_entry_diagnostics(hass, loaded)
+    (b1,) = diag["boards"]
+    assert b1["has_webhook"] is False

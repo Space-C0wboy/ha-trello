@@ -194,6 +194,7 @@ class ActivityProcessor:
         self.baselined = True
 
     async def async_process(self, actions: list[dict[str, Any]]) -> None:
+        self.baselined = True  # live activity is a starting point too: a later feed poll continues from it
         new = [a for a in sorted(actions, key=lambda a: a.get("date") or "") if self._remember(a)]
         if not new:
             return

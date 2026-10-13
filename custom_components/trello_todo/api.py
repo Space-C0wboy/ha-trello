@@ -23,6 +23,8 @@ BOARD_PARAMS = {
 }
 
 TokenGetter = Callable[[], Awaitable[str]]
+ACTIONS_PAGE_SIZE = 50
+MAX_ACTION_PAGES = 5
 
 
 class TrelloError(Exception):
@@ -194,12 +196,20 @@ class TrelloClient:
     async def get_actions(self, board_id: str, since: str | None, action_types: Iterable[str]) -> list[dict[str, Any]]:
         params = {
             "filter": ",".join(action_types),
-            "limit": "50",
+            "limit": str(ACTIONS_PAGE_SIZE),
             "fields": "type,date,data,idMemberCreator",
             "memberCreator_fields": "fullName,initials",
             "member": "true",
             "member_fields": "fullName",
         }
-        if since:
-            params["since"] = since
-        return await self._request("GET", f"/boards/{board_id}/actions", params)
+        if not since:  # startup baseline: only the newest page matters
+            return await self._request("GET", f"/boards/{board_id}/actions", params)
+        params["since"] = since
+        actions: list[dict[str, Any]] = []
+        for _ in range(MAX_ACTION_PAGES):  # after an outage, page back instead of skipping older activity
+            page = await self._request("GET", f"/boards/{board_id}/actions", params)
+            actions.extend(page)
+            if len(page) < ACTIONS_PAGE_SIZE:
+                break
+            params = {**params, "before": page[-1]["id"]}
+        return actions

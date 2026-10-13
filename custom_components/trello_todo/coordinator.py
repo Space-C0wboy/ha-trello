@@ -115,6 +115,8 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
     @callback
     def set_mode(self, mode: str) -> None:
         """webhook: Trello pushes activity, refresh is a 15-min safety net. feed: poll activity every minute."""
+        if mode == self.mode and (mode == MODE_WEBHOOK or self._feed_unsub is not None):
+            return  # health checks call this every 15 min: don't rewrite every entity for nothing
         self.mode = mode
         if mode == MODE_WEBHOOK:
             self.update_interval = timedelta(minutes=WEBHOOK_REFRESH_MINUTES)

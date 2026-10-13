@@ -412,3 +412,29 @@ async def test_entry_removal_refreshes_expired_token(hass, webhook_entry, mock_t
     await hass.async_block_till_done()
     (req,) = calls(mock_trello, "DELETE", f"{WEBHOOKS_URL}/w1")
     assert req.kwargs["headers"]["Authorization"] == "Bearer fresh"
+
+
+async def test_setup_does_not_wait_for_webhooks(hass, setup_credentials, mock_trello):
+    """Webhook setup (cloudhook + Trello HEAD check per board) runs after setup returns."""
+    import asyncio
+
+    entry = make_entry(hass)
+    mock_trello.get(BOARD_URL, payload=board(), repeat=True)
+    mock_trello.get(actions_url("b1"), payload=[], repeat=True)
+    release = asyncio.Event()
+
+    async def slow_setup(self, coordinators):
+        await release.wait()
+
+    with patch(f"{CLOUD}.WebhookManager.async_setup", slow_setup):
+        assert await asyncio.wait_for(hass.config_entries.async_setup(entry.entry_id), 5)
+        assert entry.state.name == "LOADED"
+        release.set()
+        await hass.async_block_till_done()
+
+
+async def test_webhook_api_401_starts_reauth(hass, setup_credentials, mock_trello, external_url):
+    entry = make_entry(hass)
+    mock_trello.post(CREATE_URL, status=401, body="invalid token", repeat=True)
+    await _setup(hass, entry, mock_trello)
+    assert [f["context"]["source"] for f in hass.config_entries.flow.async_progress()] == ["reauth"]

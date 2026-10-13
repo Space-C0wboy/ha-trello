@@ -6,7 +6,7 @@ from typing import Any
 from homeassistant.components.diagnostics import async_redact_data
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_BOARD_ID, SUBENTRY_BOARD
+from .const import CONF_BOARD_ID, CONF_WEBHOOKS, SUBENTRY_BOARD
 from .coordinator import TrelloConfigEntry
 
 TO_REDACT = {"token", "webhooks"}
@@ -32,6 +32,9 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: TrelloC
                 "lists": dict(board.lists) if board else None,
                 "open_cards": {list_id: len(cards) for list_id, cards in board.cards.items()} if board else None,
                 "mode": coordinator.mode if coordinator else None,
+                "has_webhook": bool(
+                    (entry.data.get(CONF_WEBHOOKS) or {}).get(subentry.data[CONF_BOARD_ID], {}).get("trello_webhook_id")
+                ),
                 "webhook_failure": manager.failures.get(subentry.data[CONF_BOARD_ID]) if manager else None,
             }
         )

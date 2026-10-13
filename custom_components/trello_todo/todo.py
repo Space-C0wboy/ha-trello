@@ -1,6 +1,7 @@
 """One to-do entity per open Trello list, added and removed as the board changes."""
 from __future__ import annotations
 
+import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from datetime import date, datetime, time
@@ -27,6 +28,8 @@ from homeassistant.util import dt as dt_util, slugify
 from .api import TrelloAuthError, TrelloBoard, TrelloCard, TrelloClient, TrelloError, parse_card
 from .const import DOMAIN, DONE_ARCHIVE, DONE_MOVE, DONE_MOVE_AND_ARCHIVE, MAX_ITEMS_ATTRIBUTE
 from .coordinator import TrelloBoardCoordinator, TrelloConfigEntry
+
+_LOGGER = logging.getLogger(__name__)
 
 PARALLEL_UPDATES = 1
 
@@ -245,8 +248,12 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
         try:
             result = await write(self.coordinator.client)
             if local is not None and (board := self.coordinator.data) is not None:
-                local(board, result)
-                self.coordinator.async_set_updated_data(board)
+                try:
+                    local(board, result)
+                except (KeyError, TypeError, ValueError) as err:  # the refresh below corrects the board anyway
+                    _LOGGER.debug("Could not mirror a Trello write locally: %s", err)
+                else:
+                    self.coordinator.async_set_updated_data(board)
         except ConfigEntryAuthFailed as err:
             # OAuth2TokenRequestReauthError: OAuth2Session has already started reauth.
             raise HomeAssistantError(translation_domain=DOMAIN, translation_key="auth_failed") from err
@@ -303,7 +310,9 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
         fields["pos"] = "bottom"
         await self._write(
             lambda client: client.create_card(fields),
-            lambda board, raw: board.cards.setdefault(self._list_id, []).append(parse_card(raw, {}, {})),
+            lambda board, raw: (
+                None if board.card(raw["id"]) else board.cards.setdefault(self._list_id, []).append(parse_card(raw, {}, {}))
+            ),
         )
 
     async def async_update_todo_item(self, item: TodoItem) -> None:

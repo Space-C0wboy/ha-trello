@@ -81,3 +81,12 @@ async def test_activity_context_has_me_done_list_and_names(hass, loaded):
     ctx = _coordinator(loaded)._activity_context()
     assert (ctx.me, ctx.done_list) == ("m1", "l_done")
     assert ctx.members == {"m1": "Sam", "m2": "Alex"}
+
+
+async def test_set_mode_same_mode_is_quiet(hass, loaded):
+    coordinator = _coordinator(loaded)
+    updates = []
+    remove = coordinator.async_add_listener(lambda: updates.append(1))
+    coordinator.set_mode(coordinator.mode)
+    remove()
+    assert updates == []
