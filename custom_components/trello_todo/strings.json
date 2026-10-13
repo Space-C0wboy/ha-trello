@@ -100,7 +100,7 @@
           "scan_interval": "Refresh interval"
         },
         "data_description": {
-          "scan_interval": "Seconds between refreshes of each board (60-900). Changes made in Home Assistant refresh immediately."
+          "scan_interval": "Seconds between board refreshes for boards without instant updates (60-900). Boards with a working Trello webhook refresh every 15 minutes as a safety net. Changes made in Home Assistant show immediately."
         }
       }
     }

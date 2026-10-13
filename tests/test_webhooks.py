@@ -12,7 +12,6 @@ from custom_components.trello_todo.const import MODE_FEED, MODE_WEBHOOK
 from custom_components.trello_todo.webhooks import signature
 
 from .common import (
-    API,
     BOARD_URL,
     CLIENT_SECRET,
     WEBHOOKS_URL,

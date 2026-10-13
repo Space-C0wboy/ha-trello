@@ -16,6 +16,7 @@ A [HACS](https://hacs.xyz/) custom integration for [Trello](https://trello.com/)
 - **Check items off:** each board decides what checking off does: move the card to a done list, archive it, or both. Cards in the done list show as completed.
 - **Edit from Home Assistant:** add cards, rename them, set due dates and descriptions, and re-order them.
 - **Safe deletes:** deleting an item archives the card. Nothing is ever hard-deleted.
+- **Trello events for automations:** comments, moves, due dates, assignments and more fire events on an `event` entity per board — within seconds with Nabu Casa or a public HTTPS URL, within a minute otherwise.
 - **Dashboard-friendly attributes:** card names, due dates, labels and members are available in state attributes.
 - **No extra dependencies:** uses only `aiohttp`, which is already bundled with Home Assistant.
 
@@ -23,12 +24,13 @@ A [HACS](https://hacs.xyz/) custom integration for [Trello](https://trello.com/)
 
 ## Entities
 
-Each board is a device. Each open list on the board is a `todo` entity.
+Each board is a device. Each open list on the board is a `todo` entity, and each board has one `event` entity.
 
 | Entity | Entity ID | State | Description |
 |--------|-----------|-------|-------------|
 | One per open list | `todo.<list name>` | Number of open items | Its cards, as to-do items in list order |
 | The board's done list | `todo.<done list name>` | `0` | Its cards, shown as completed items |
+| Board activity | `event.<board name>_activity` | Time of the last event | Fires an event for each Trello activity (see Events) |
 
 If two boards have a list with the same name, the second one gets `_2`.
 
@@ -136,11 +138,79 @@ data:
 
 ---
 
+## Events
+
+Each board also gets an event entity, `event.<board name>_activity` (for example `event.household_activity`). It fires one event per Trello activity on the board, including changes made by other people and from the Trello app.
+
+| `event_type` | When |
+|--------------|------|
+| `card_created` | A card is created, copied, converted from a checklist item, or moved in from another board |
+| `card_moved` | A card moves to another list |
+| `card_archived` / `card_unarchived` | A card is archived or restored |
+| `due_changed` | A due date is set, changed or removed |
+| `due_completed` | A due date is marked complete or incomplete |
+| `card_updated` | A card's name or description changes |
+| `card_deleted` | A card is deleted |
+| `comment_added` | Someone comments on a card |
+| `member_added` / `member_removed` | Someone is added to or removed from a card |
+| `label_added` / `label_removed` | A label is added or removed |
+| `checklist_item_checked` | A checklist item is checked or unchecked |
+| `attachment_added` | An attachment is added |
+
+Every event carries `card_id`, `card_name`, `card_url`, `list_id`, `list_name`, `by` (`{id, name, initials}`), `by_me` (true when you did it), `action_id` and `date`. Some types add more:
+
+| Event | Extra attributes |
+|-------|------------------|
+| `card_moved` | `from_list`, `to_list`, `to_done_list` (true when it landed in the board's done list) |
+| `due_changed` | `due`, `old_due` |
+| `due_completed` | `due_complete` |
+| `comment_added` | `comment` (first 1,000 characters) |
+| `member_added` / `member_removed` | `member`, `for_me` (true when it's you) |
+| `label_added` / `label_removed` | `label` (`{name, color}`) |
+| `checklist_item_checked` | `item`, `checked`, `checklist` |
+| `attachment_added` | `attachment` |
+
+### Example automations
+
+Notify when someone else comments:
+
+```yaml
+triggers:
+  - trigger: state
+    entity_id: event.household_activity
+conditions:
+  - condition: state
+    entity_id: event.household_activity
+    attribute: event_type
+    state: comment_added
+  - condition: state
+    entity_id: event.household_activity
+    attribute: by_me
+    state: false
+actions:
+  - action: notify.notify
+    data:
+      message: "{{ trigger.to_state.attributes.by.name }} commented on {{ trigger.to_state.attributes.card_name }}: {{ trigger.to_state.attributes.comment }}"
+```
+
+A card was assigned to me: use `event_type` `member_added` with `for_me` `true`.
+
+A card landed in the done list: use `event_type` `card_moved` with `to_done_list` `true`.
+
+---
+
 ## Data & Refresh
 
-- **Update frequency:** each board is refreshed every 2 minutes by default, with one request per board.
-- **Changes made in Home Assistant:** that board refreshes immediately.
-- **Changes made in Trello:** show up within the refresh interval.
+Each board runs in one of two modes, shown in the event entity's `source` attribute:
+
+| Mode | When | Events | Board refresh |
+|------|------|--------|---------------|
+| `webhook` | Nabu Casa is active, or Home Assistant has an HTTPS external URL | Within seconds | Every 15 minutes (safety net) |
+| `feed` | No public URL, or Trello couldn't reach it | Within about a minute | Your refresh interval (default 2 minutes) |
+
+- **Changes made in Home Assistant** show immediately, in both modes.
+- **Events from before a restart** are not replayed.
+- **Webhook health** is checked every 15 minutes; a broken webhook is recreated, and the board uses the feed until it works.
 - **Rate limits:** if Trello rate-limits a request, that board backs off and retries.
 
 ---
@@ -162,6 +232,9 @@ data:
 **Checking off fails with "The done list … no longer exists"**
 - The board's done list was archived or deleted in Trello. Use **Change done settings** on that board.
 
+**Events arrive about a minute late**
+- The board is on the activity feed. Check the event entity's `source` attribute, and the reason under `webhook_failure` in the integration's diagnostics. Trello can only reach Home Assistant through Nabu Casa or an HTTPS external URL.
+
 **Check logs**
 - Settings → System → Logs, filter by `trello_todo`
 
@@ -169,7 +242,7 @@ data:
 
 ## Limits
 
-Instant updates (Trello webhooks) are planned. These are not supported yet:
+These are not supported yet:
 - Checklists, comments and attachments
 - Editing labels or members
 - Moving cards between ordinary lists
