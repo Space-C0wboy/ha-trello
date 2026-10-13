@@ -15,7 +15,7 @@ BOARD_PARAMS = {
     "lists": "open",
     "list_fields": "name,pos",
     "cards": "open",
-    "card_fields": "name,desc,due,dueComplete,idList,idLabels,idMembers,pos,shortUrl,dateLastActivity",
+    "card_fields": "name,desc,due,dueComplete,start,idList,idLabels,idMembers,pos,shortUrl,dateLastActivity",
     "labels": "all",
     "label_fields": "name,color",
     "members": "all",
@@ -91,6 +91,9 @@ class TrelloCard:
     url: str
     labels: tuple[TrelloLabel, ...] = ()
     members: tuple[str, ...] = ()  # initials
+    member_ids: tuple[str, ...] = ()
+    due_complete: bool = False
+    start: str | None = None
 
 
 @dataclass(slots=True)
@@ -122,6 +125,9 @@ def parse_card(raw: dict[str, Any], labels: dict[str, TrelloLabel], initials: di
         url=raw.get("shortUrl") or "",
         labels=tuple(labels[i] for i in raw.get("idLabels", []) if i in labels),
         members=tuple(initials[i] for i in raw.get("idMembers", []) if i in initials),
+        member_ids=tuple(i for i in raw.get("idMembers", []) if i in initials),
+        due_complete=bool(raw.get("dueComplete")),
+        start=raw.get("start"),
     )
 
 
