@@ -5,7 +5,7 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from custom_components.trello_todo.const import DOMAIN
 
-from .common import API, LISTS_B2, board, board_subentry, bodies, calls, card, card_url
+from .common import API, LISTS_B2, board, board_subentry, bodies, calls, card, card_url, checklists_url
 
 INFO = {
     "card_id": "c1",
@@ -282,3 +282,65 @@ async def test_add_member_server_error_still_fails(hass, loaded, mock_trello):
     mock_trello.post(f"{API}/cards/c1/idMembers", status=500)
     with pytest.raises(HomeAssistantError):
         await _call(hass, "assign_member", {"entity_id": "todo.alex", "card_name": "Buy stamps", "member": "alex"})
+
+
+GROCERIES = [{"id": "cl1", "name": "Groceries", "checkItems": [
+    {"id": "ci1", "name": "Milk", "state": "incomplete"},
+    {"id": "ci2", "name": "Eggs", "state": "complete"},
+]}]
+
+
+async def test_add_checklist_item_creates_checklist(hass, loaded, mock_trello):
+    mock_trello.get(checklists_url("c1"), payload=[])
+    mock_trello.post(f"{API}/cards/c1/checklists", payload={"id": "clN", "name": "Checklist"})
+    mock_trello.post(f"{API}/checklists/clN/checkItems", payload={"id": "ciN"})
+    result = await _call(hass, "add_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "item": "Milk"}, response=True)
+    assert bodies(mock_trello, "POST", f"{API}/cards/c1/checklists") == [{"name": "Checklist"}]
+    assert bodies(mock_trello, "POST", f"{API}/checklists/clN/checkItems") == [{"name": "Milk"}]
+    assert (result["checklist_id"], result["item_id"]) == ("clN", "ciN")
+
+
+async def test_add_checklist_item_reuses_checklist(hass, loaded, mock_trello):
+    mock_trello.get(checklists_url("c1"), payload=GROCERIES)
+    mock_trello.post(f"{API}/checklists/cl1/checkItems", payload={"id": "ci3"})
+    await _call(hass, "add_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "checklist": "groceries", "item": "Bread"})
+    assert calls(mock_trello, "POST", f"{API}/cards/c1/checklists") == []
+
+
+@pytest.mark.parametrize(("item", "checked", "item_id", "state"), [
+    ("milk", True, "ci1", "complete"),
+    ("ci2", False, "ci2", "incomplete"),
+])
+async def test_set_checklist_item(hass, loaded, mock_trello, item, checked, item_id, state):
+    mock_trello.get(checklists_url("c1"), payload=GROCERIES)
+    mock_trello.put(f"{API}/cards/c1/checkItem/{item_id}", payload={"id": item_id})
+    await _call(hass, "set_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "item": item, "checked": checked})
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1/checkItem/{item_id}") == [{"state": state}]
+
+
+async def test_set_checklist_item_ambiguous(hass, loaded, mock_trello):
+    """Review Focus 3."""
+    two = [*GROCERIES, {"id": "cl2", "name": "Party", "checkItems": [{"id": "ci9", "name": "Milk", "state": "incomplete"}]}]
+    mock_trello.get(checklists_url("c1"), payload=two)
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "set_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "item": "Milk", "checked": True})
+    assert info.value.translation_key == "checklist_item_ambiguous"
+
+
+async def test_set_checklist_item_scoped_by_checklist(hass, loaded, mock_trello):
+    two = [*GROCERIES, {"id": "cl2", "name": "Party", "checkItems": [{"id": "ci9", "name": "Milk", "state": "incomplete"}]}]
+    mock_trello.get(checklists_url("c1"), payload=two)
+    mock_trello.put(f"{API}/cards/c1/checkItem/ci9", payload={"id": "ci9"})
+    await _call(hass, "set_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "checklist": "Party", "item": "Milk", "checked": True})
+    assert len(calls(mock_trello, "PUT", f"{API}/cards/c1/checkItem/ci9")) == 1
+
+
+@pytest.mark.parametrize(("data", "key"), [
+    ({"item": "Butter"}, "checklist_item_not_found"),
+    ({"checklist": "Nope", "item": "Milk"}, "checklist_not_found"),
+])
+async def test_set_checklist_item_missing(hass, loaded, mock_trello, data, key):
+    mock_trello.get(checklists_url("c1"), payload=GROCERIES)
+    with pytest.raises(ServiceValidationError) as info:
+        await _call(hass, "set_checklist_item", {"entity_id": "todo.alex", "card_name": "Buy stamps", "checked": True, **data})
+    assert info.value.translation_key == key

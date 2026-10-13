@@ -401,6 +401,56 @@ def _membership_handler(field: str, add: bool) -> Callable[[ServiceCall], Awaita
     return handle
 
 
+ADD_ITEM_SCHEMA = _card_schema({vol.Required("item"): cv.string, vol.Optional("checklist", default="Checklist"): cv.string})
+SET_ITEM_SCHEMA = _card_schema(
+    {vol.Required("item"): cv.string, vol.Required("checked"): cv.boolean, vol.Optional("checklist"): cv.string}
+)
+
+
+def _named(items: list[dict[str, Any]], name: str) -> list[dict[str, Any]]:
+    wanted = name.strip().casefold()
+    return [i for i in items if (i.get("name") or "").casefold() == wanted]
+
+
+@_handler
+async def _add_checklist_item(call: ServiceCall) -> Result:
+    hass, data = call.hass, call.data
+    target = await _resolve_card(hass, data)
+    card_id = target.card_id
+    checklists = await _api(hass, target.coordinator, lambda client: client.get_checklists(card_id), card=card_id)
+    found = _named(checklists or [], data["checklist"])
+    checklist = found[0] if found else await _api(
+        hass, target.coordinator, lambda client: client.create_checklist(card_id, data["checklist"]), card=card_id
+    )
+    item = await _api(
+        hass, target.coordinator, lambda client: client.add_check_item(checklist["id"], data["item"]), card=card_id
+    )
+    return _target_info(target, checklist_id=checklist["id"], item_id=(item or {}).get("id")), [target.coordinator]
+
+
+@_handler
+async def _set_checklist_item(call: ServiceCall) -> Result:
+    hass, data = call.hass, call.data
+    target = await _resolve_card(hass, data)
+    card_id = target.card_id
+    checklists = await _api(hass, target.coordinator, lambda client: client.get_checklists(card_id), card=card_id) or []
+    if data.get("checklist"):
+        checklists = _named(checklists, data["checklist"])
+        if not checklists:
+            raise ResolveError("checklist_not_found", value=data["checklist"])
+    items = [item for checklist in checklists for item in checklist.get("checkItems") or []]
+    matches = [item for item in items if item.get("id") == data["item"]] or _named(items, data["item"])
+    if not matches:
+        raise ResolveError("checklist_item_not_found", value=data["item"])
+    if len(matches) > 1:
+        raise ResolveError("checklist_item_ambiguous", value=data["item"])
+    state = "complete" if data["checked"] else "incomplete"
+    await _api(
+        hass, target.coordinator, lambda client: client.set_check_item(card_id, matches[0]["id"], state), card=card_id
+    )
+    return _target_info(target), [target.coordinator]
+
+
 # -- registration -------------------------------------------------------------------------------------
 SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], vol.Schema]] = {
     "create_card": (_create_card, CREATE_SCHEMA),
@@ -414,6 +464,8 @@ SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], v
     "remove_label": (_membership_handler("label", False), LABEL_SCHEMA),
     "assign_member": (_membership_handler("member", True), MEMBER_SCHEMA),
     "unassign_member": (_membership_handler("member", False), MEMBER_SCHEMA),
+    "add_checklist_item": (_add_checklist_item, ADD_ITEM_SCHEMA),
+    "set_checklist_item": (_set_checklist_item, SET_ITEM_SCHEMA),
 }
 
 
