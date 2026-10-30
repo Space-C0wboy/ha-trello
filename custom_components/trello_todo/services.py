@@ -478,6 +478,31 @@ async def _set_checklist_item(call: ServiceCall) -> Result:
     return _target_info(target), [target.coordinator]
 
 
+def _checklist_info(raw: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [
+        {
+            "id": checklist.get("id"),
+            "name": checklist.get("name"),
+            "items": [
+                {"id": item.get("id"), "name": item.get("name"), "checked": item.get("state") == "complete"}
+                for item in checklist.get("checkItems") or []
+            ],
+        }
+        for checklist in raw
+    ]
+
+
+@_handler
+async def _get_checklists(call: ServiceCall) -> Result:
+    hass, data = call.hass, call.data
+    target = await _resolve_card(hass, data)
+    checklists = await _api(
+        hass, target.coordinator, lambda client: client.get_checklists(target.card_id), card=target.card_id
+    )
+    # Read-only: nothing changed, so no coordinator needs a refresh.
+    return _target_info(target, checklists=_checklist_info(checklists or [])), []
+
+
 # -- registration -------------------------------------------------------------------------------------
 SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], vol.Schema]] = {
     "create_card": (_create_card, CREATE_SCHEMA),
@@ -493,10 +518,17 @@ SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], v
     "unassign_member": (_membership_handler("member", False), MEMBER_SCHEMA),
     "add_checklist_item": (_add_checklist_item, ADD_ITEM_SCHEMA),
     "set_checklist_item": (_set_checklist_item, SET_ITEM_SCHEMA),
+    "get_checklists": (_get_checklists, CARD_ONLY_SCHEMA),
 }
+
+
+# Read-only actions: a response is the only point of calling them, so require one
+# instead of letting them silently no-op without `return_response: true`.
+RESPONSE_ONLY = {"get_checklists"}
 
 
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     for name, (handler, schema) in SERVICES.items():
-        hass.services.async_register(DOMAIN, name, handler, schema=schema, supports_response=SupportsResponse.OPTIONAL)
+        supports_response = SupportsResponse.ONLY if name in RESPONSE_ONLY else SupportsResponse.OPTIONAL
+        hass.services.async_register(DOMAIN, name, handler, schema=schema, supports_response=supports_response)

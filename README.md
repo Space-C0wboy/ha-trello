@@ -285,6 +285,7 @@ Automations and scripts can change Trello with these actions. You'll find them u
 | `trello_todo.assign_member` / `unassign_member` | Add or remove a member |
 | `trello_todo.add_checklist_item` | Add an item to a checklist; the checklist is created if it doesn't exist |
 | `trello_todo.set_checklist_item` | Check or uncheck a checklist item |
+| `trello_todo.get_checklists` | Read a card's checklists and items, including checked state |
 | `trello_todo.set_due` | Set, clear or complete a due date |
 
 **Which card.** Every action except `create_card` needs one of these:
@@ -300,7 +301,7 @@ Automations and scripts can change Trello with these actions. You'll find them u
 
 **Chaining actions.** To act again on a card you just created or moved, pass `card: "{{ result.card_id }}"` from the earlier step's response rather than looking it up by `card_name`.
 
-**Results.** Add `response_variable` to use the card's details in later steps: `card_id`, `card_url`, `card_name`, `list_name` and `board_name`. `add_comment` also returns `comment_id`.
+**Results.** Add `response_variable` to use the card's details in later steps: `card_id`, `card_url`, `card_name`, `list_name` and `board_name`. `add_comment` also returns `comment_id`. `get_checklists` is read-only and *only* useful with a response -- it requires `response_variable` and additionally returns `checklists`, a list of `{id, name, items: [{id, name, checked}]}`.
 
 ### Example: comment when a card reaches the done list
 
@@ -338,6 +339,22 @@ actions:
       card_name: Order furnace filters
       item: Delivered
       checked: true
+```
+
+### Example: fetch a card's checklist to send elsewhere
+
+To-do entities don't carry full checklist data (there could be a lot of it), so an automation that needs it -- printing a receipt, posting to a chat -- fetches it on demand:
+
+```yaml
+actions:
+  - action: trello_todo.get_checklists
+    data:
+      card: "{{ trigger.to_state.attributes.card_id }}"
+    response_variable: card
+  - action: rest_command.print_checklist
+    data:
+      title: "{{ card.card_name }}"
+      items: "{{ card.checklists }}"
 ```
 
 ### Example: create a card from a recurring calendar event
