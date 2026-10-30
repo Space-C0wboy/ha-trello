@@ -300,3 +300,18 @@ set_due:
     due_complete:
       selector:
         boolean: {}
+get_checklists:
+  fields:
+    card:
+      selector:
+        text: {}
+      example: https://trello.com/c/abc12345
+    entity_id:
+      selector:
+        entity:
+          filter:
+            integration: trello_todo
+            domain: todo
+    card_name:
+      selector:
+        text: {}

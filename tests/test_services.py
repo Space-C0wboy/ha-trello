@@ -369,6 +369,39 @@ async def test_set_checklist_item_missing(hass, loaded, mock_trello, data, key):
     assert info.value.translation_key == key
 
 
+async def test_get_checklists(hass, loaded, mock_trello):
+    mock_trello.get(checklists_url("c1"), payload=GROCERIES)
+    result = await _call(hass, "get_checklists", {"entity_id": "todo.alex", "card_name": "Buy stamps"}, response=True)
+    assert result["checklists"] == [
+        {
+            "id": "cl1",
+            "name": "Groceries",
+            "items": [
+                {"id": "ci1", "name": "Milk", "checked": False},
+                {"id": "ci2", "name": "Eggs", "checked": True},
+            ],
+        }
+    ]
+    assert (result["card_id"], result["card_name"], result["list_id"], result["board_name"]) == (
+        "c1", "Buy stamps", "l_alex", "Household",
+    )
+
+
+async def test_get_checklists_is_read_only(hass, loaded, mock_trello):
+    """A pure lookup must not trigger a board refresh."""
+    mock_trello.get(checklists_url("c1"), payload=GROCERIES)
+    before = _board_requests(mock_trello)
+    await _call(hass, "get_checklists", {"entity_id": "todo.alex", "card_name": "Buy stamps"}, response=True)
+    assert _board_requests(mock_trello) == before
+
+
+async def test_get_checklists_requires_response(hass, loaded, mock_trello):
+    """Calling it without return_response would otherwise just silently discard the data."""
+    mock_trello.get(checklists_url("c1"), payload=GROCERIES)
+    with pytest.raises(ServiceValidationError):
+        await _call(hass, "get_checklists", {"entity_id": "todo.alex", "card_name": "Buy stamps"})
+
+
 async def test_malformed_card_reference_is_card_not_found(hass, loaded, mock_trello):
     """Final review I1: Trello answers 400 "invalid id" for a malformed id, which is still "card not found"."""
     mock_trello.get(card_url("buy-stamps"), status=400, body="invalid id")

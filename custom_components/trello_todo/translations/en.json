@@ -606,6 +606,24 @@
         }
       }
     },
+    "get_checklists": {
+      "name": "Get checklists",
+      "description": "Read a Trello card's checklists and their items, including checked state. Requires a response.",
+      "fields": {
+        "card": {
+          "name": "Card",
+          "description": "Trello card id, short link or URL. Trello events provide it as card_id / card_url."
+        },
+        "entity_id": {
+          "name": "To-do list",
+          "description": "A Trello to-do list. With card name, finds the card in that list."
+        },
+        "card_name": {
+          "name": "Card name",
+          "description": "Name of the card in that list (case-insensitive)."
+        }
+      }
+    },
     "set_due": {
       "name": "Set due date",
       "description": "Set, clear or complete a Trello card's due date.",
