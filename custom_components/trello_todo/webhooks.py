@@ -284,7 +284,7 @@ class WebhookManager:
                 try:
                     await _delete_cloudhook(self.hass, webhook_id)
                     return await _create_cloudhook(self.hass, webhook_id), ""
-                except ValueError, HomeAssistantError:
+                except (ValueError, HomeAssistantError):
                     return None, "cloud_not_connected"
             except (
                 HomeAssistantError
@@ -414,7 +414,7 @@ class WebhookManager:
             self._ok(coordinator)
         try:
             action = json.loads(body)["action"]
-        except ValueError, KeyError, TypeError:
+        except (ValueError, KeyError, TypeError):
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         if not isinstance(action, dict):
             return web.Response(status=HTTPStatus.BAD_REQUEST)

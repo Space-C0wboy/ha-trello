@@ -107,7 +107,7 @@ class BoardSubentryFlow(ConfigSubentryFlow):
         if not self._available:
             try:
                 boards = await self._client().get_boards()
-            except TrelloError, HomeAssistantError, ClientError:
+            except (TrelloError, HomeAssistantError, ClientError):
                 return self.async_abort(reason="cannot_connect")
             configured = configured_board_ids(self.hass)
             self._available = {b["id"]: b["name"] for b in boards if b["id"] not in configured}
@@ -117,7 +117,7 @@ class BoardSubentryFlow(ConfigSubentryFlow):
             self._board_id = user_input["board"]
             try:
                 self._lists = await self._client().get_lists(self._board_id)
-            except TrelloError, HomeAssistantError, ClientError:
+            except (TrelloError, HomeAssistantError, ClientError):
                 return self.async_abort(reason="cannot_connect")
             return await self.async_step_done()
         options = [SelectOptionDict(value=bid, label=name) for bid, name in self._available.items()]
@@ -163,7 +163,7 @@ class BoardSubentryFlow(ConfigSubentryFlow):
         if not self._lists:
             try:
                 self._lists = await self._client().get_lists(subentry.data[CONF_BOARD_ID])
-            except TrelloError, HomeAssistantError, ClientError:
+            except (TrelloError, HomeAssistantError, ClientError):
                 return self.async_abort(reason="cannot_connect")
         return self.async_show_form(
             step_id="reconfigure",
