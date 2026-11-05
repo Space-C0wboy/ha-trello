@@ -1,4 +1,5 @@
 """One DataUpdateCoordinator per board: one board request per refresh."""
+
 from __future__ import annotations
 
 import logging
@@ -10,7 +11,8 @@ from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntry, ConfigSubentry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant, callback
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
-from homeassistant.helpers import device_registry as dr, issue_registry as ir
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -60,14 +62,20 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
     config_entry: TrelloConfigEntry
 
     def __init__(
-        self, hass: HomeAssistant, entry: TrelloConfigEntry, client: TrelloClient, subentry: ConfigSubentry
+        self,
+        hass: HomeAssistant,
+        entry: TrelloConfigEntry,
+        client: TrelloClient,
+        subentry: ConfigSubentry,
     ) -> None:
         super().__init__(
             hass,
             _LOGGER,
             config_entry=entry,
             name=f"{DOMAIN} {subentry.title}",
-            update_interval=timedelta(seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)),
+            update_interval=timedelta(
+                seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+            ),
         )
         self.client = client
         self.subentry_id = subentry.subentry_id
@@ -77,7 +85,9 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
         self.done_list: str | None = subentry.data.get(CONF_DONE_LIST)
         self._issue_id = f"board_inaccessible_{self.board_id}"
         self.inaccessible = False
-        self._scan_interval = timedelta(seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL))
+        self._scan_interval = timedelta(
+            seconds=entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
+        )
         self.mode = MODE_FEED
         self.processor = ActivityProcessor(self._activity_context, self.async_request_refresh)
         self._feed_unsub: CALLBACK_TYPE | None = None
@@ -110,7 +120,9 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
     async def async_poll_feed(self, _now: datetime | None = None) -> None:
         """Fetch new board activity: feed mode every minute, and once at startup for the baseline."""
         try:
-            actions = await self.client.get_actions(self.board_id, self.processor.newest_id, ACTION_TYPES)
+            actions = await self.client.get_actions(
+                self.board_id, self.processor.newest_id, ACTION_TYPES
+            )
         except (TrelloError, ClientError, HomeAssistantError) as err:
             _LOGGER.debug("Trello activity feed for %s failed: %s", self.board_title, err)
             return
@@ -169,7 +181,9 @@ class TrelloBoardCoordinator(DataUpdateCoordinator[TrelloBoard]):
             )
             raise UpdateFailed(str(err)) from err
         except TrelloRateLimitError as err:
-            raise UpdateFailed(str(err), retry_after=err.retry_after or DEFAULT_RATE_LIMIT_BACKOFF) from err
+            raise UpdateFailed(
+                str(err), retry_after=err.retry_after or DEFAULT_RATE_LIMIT_BACKOFF
+            ) from err
         except TrelloError as err:
             raise UpdateFailed(str(err)) from err
         self.inaccessible = False

@@ -1,4 +1,5 @@
 """Tests for coordinator modes and the activity feed."""
+
 from datetime import timedelta
 
 from custom_components.trello_todo.const import MODE_FEED, MODE_WEBHOOK
@@ -26,7 +27,10 @@ async def test_startup_runs_baseline_feed_poll(hass, loaded, mock_trello):
 
 async def test_first_feed_poll_is_baseline_only(hass, load_entry, mock_trello):
     """Review Focus 2: activity from before startup never fires."""
-    mock_trello.get(actions_url("b1"), payload=[action("old", "commentCard", card=CARD, list=ALEX_LIST, text="x")])
+    mock_trello.get(
+        actions_url("b1"),
+        payload=[action("old", "commentCard", card=CARD, list=ALEX_LIST, text="x")],
+    )
     entry = await load_entry()
     coordinator = _coordinator(entry)
     assert coordinator.processor.newest_id == "old"
@@ -41,19 +45,29 @@ async def test_feed_fires_new_activity(hass, loaded, mock_trello):
     coordinator = _coordinator(loaded)
     fired = _listen(coordinator)
     mock_trello.clear()
-    mock_trello.get(actions_url("b1"), payload=[action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="On it")])
-    mock_trello.get(f"{API}/boards/b1", payload={}, repeat=True)  # refresh may follow; content irrelevant here
+    mock_trello.get(
+        actions_url("b1"),
+        payload=[action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="On it")],
+    )
+    mock_trello.get(
+        f"{API}/boards/b1", payload={}, repeat=True
+    )  # refresh may follow; content irrelevant here
     await coordinator.async_poll_feed()
     assert [(t, a["comment"]) for t, a in fired] == [("comment_added", "On it")]
 
 
 async def test_feed_uses_newest_id_as_since(hass, load_entry, mock_trello):
-    mock_trello.get(actions_url("b1"), payload=[action("a9", "commentCard", card=CARD, list=ALEX_LIST, text="x")])
+    mock_trello.get(
+        actions_url("b1"),
+        payload=[action("a9", "commentCard", card=CARD, list=ALEX_LIST, text="x")],
+    )
     entry = await load_entry()
     mock_trello.clear()
     mock_trello.get(actions_url("b1"), payload=[])
     await _coordinator(entry).async_poll_feed()
-    req = calls(mock_trello, "GET", f"{API}/boards/b1/actions")[-1]  # clear() keeps recorded requests
+    req = calls(mock_trello, "GET", f"{API}/boards/b1/actions")[
+        -1
+    ]  # clear() keeps recorded requests
     assert req.kwargs["params"]["since"] == "a9"
 
 

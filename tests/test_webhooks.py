@@ -1,4 +1,5 @@
 """Tests for Trello webhooks: URL choice, lifecycle, signed handler."""
+
 import json
 import logging
 import re
@@ -80,7 +81,9 @@ async def test_external_url_creates_webhook(hass, setup_credentials, mock_trello
     assert coordinator.update_interval == timedelta(minutes=15)
 
 
-async def test_webhook_state_save_does_not_reload(hass, setup_credentials, mock_trello, external_url):
+async def test_webhook_state_save_does_not_reload(
+    hass, setup_credentials, mock_trello, external_url
+):
     """Review Focus 1."""
     entry = make_entry(hass)
     mock_trello.post(CREATE_URL, payload={"id": "w1", "active": True})
@@ -95,7 +98,10 @@ async def test_cloudhook_preferred(hass, setup_credentials, mock_trello, externa
     mock_trello.post(CREATE_URL, payload={"id": "w1", "active": True})
     with (
         patch("custom_components.trello_todo.webhooks._cloud_active", return_value=True),
-        patch("custom_components.trello_todo.webhooks._create_cloudhook", AsyncMock(return_value="https://hooks.nabu.casa/x")),
+        patch(
+            "custom_components.trello_todo.webhooks._create_cloudhook",
+            AsyncMock(return_value="https://hooks.nabu.casa/x"),
+        ),
     ):
         await _setup(hass, entry, mock_trello)
     assert entry.data["webhooks"]["b1"]["callback_url"] == "https://hooks.nabu.casa/x"
@@ -105,9 +111,17 @@ async def test_reuses_healthy_webhook(hass, setup_credentials, mock_trello, exte
     entry = make_entry(hass)
     url = f"{EXTERNAL}/api/webhook/hid"
     hass.config_entries.async_update_entry(
-        entry, data={**entry.data, "webhooks": {"b1": {"webhook_id": "hid", "trello_webhook_id": "w1", "callback_url": url}}}
+        entry,
+        data={
+            **entry.data,
+            "webhooks": {
+                "b1": {"webhook_id": "hid", "trello_webhook_id": "w1", "callback_url": url}
+            },
+        },
     )
-    mock_trello.get(f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": True, "callbackURL": url}, repeat=True)
+    mock_trello.get(
+        f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": True, "callbackURL": url}, repeat=True
+    )
     await _setup(hass, entry, mock_trello)
     assert calls(mock_trello, "POST", WEBHOOKS_URL) == []
     assert _coordinator(entry).mode == MODE_WEBHOOK
@@ -117,7 +131,13 @@ async def test_recreates_inactive_webhook(hass, setup_credentials, mock_trello, 
     entry = make_entry(hass)
     url = f"{EXTERNAL}/api/webhook/hid"
     hass.config_entries.async_update_entry(
-        entry, data={**entry.data, "webhooks": {"b1": {"webhook_id": "hid", "trello_webhook_id": "w1", "callback_url": url}}}
+        entry,
+        data={
+            **entry.data,
+            "webhooks": {
+                "b1": {"webhook_id": "hid", "trello_webhook_id": "w1", "callback_url": url}
+            },
+        },
     )
     mock_trello.get(f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": False, "callbackURL": url})
     mock_trello.delete(f"{WEBHOOKS_URL}/w1", payload={})
@@ -127,10 +147,14 @@ async def test_recreates_inactive_webhook(hass, setup_credentials, mock_trello, 
     assert entry.data["webhooks"]["b1"]["trello_webhook_id"] == "w2"
 
 
-async def test_existing_webhook_gets_fresh_callback(hass, setup_credentials, mock_trello, external_url):
+async def test_existing_webhook_gets_fresh_callback(
+    hass, setup_credentials, mock_trello, external_url
+):
     """Review Focus 5."""
     entry = make_entry(hass)
-    mock_trello.post(CREATE_URL, status=400, body="A webhook with that callback, model, and token already exists")
+    mock_trello.post(
+        CREATE_URL, status=400, body="A webhook with that callback, model, and token already exists"
+    )
     mock_trello.post(CREATE_URL, payload={"id": "w2", "active": True})
     await _setup(hass, entry, mock_trello)
     first, second = calls(mock_trello, "POST", WEBHOOKS_URL)
@@ -139,7 +163,9 @@ async def test_existing_webhook_gets_fresh_callback(hass, setup_credentials, moc
     assert _coordinator(entry).mode == MODE_WEBHOOK
 
 
-async def test_creation_failure_means_feed(hass, setup_credentials, mock_trello, external_url, caplog):
+async def test_creation_failure_means_feed(
+    hass, setup_credentials, mock_trello, external_url, caplog
+):
     entry = make_entry(hass)
     mock_trello.post(CREATE_URL, status=400, body="URL did not return 200 status code", repeat=True)
     await _setup(hass, entry, mock_trello)
@@ -164,7 +190,9 @@ async def webhook_entry(hass, setup_credentials, mock_trello, external_url):
 
 
 async def test_valid_post_fires_event(hass, hass_client_no_auth, webhook_entry):
-    body = json.dumps({"action": action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="hi")}).encode()
+    body = json.dumps(
+        {"action": action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="hi")}
+    ).encode()
     sig = signature(CLIENT_SECRET, body, webhook_entry.data["webhooks"]["b1"]["callback_url"])
     resp = await _post(hass, hass_client_no_auth, webhook_entry, body, sig)
     assert resp.status == 200
@@ -174,7 +202,9 @@ async def test_valid_post_fires_event(hass, hass_client_no_auth, webhook_entry):
 
 async def test_bad_signature_rejected(hass, hass_client_no_auth, webhook_entry):
     """Review Focus 3."""
-    body = json.dumps({"action": action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="hi")}).encode()
+    body = json.dumps(
+        {"action": action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="hi")}
+    ).encode()
     for sig in ("forged", None):
         resp = await _post(hass, hass_client_no_auth, webhook_entry, body, sig)
         assert resp.status == 401
@@ -198,7 +228,9 @@ async def test_unknown_board_gone(hass, hass_client_no_auth, webhook_entry):
 
 async def test_reload_keeps_trello_webhook(hass, webhook_entry, mock_trello):
     url = webhook_entry.data["webhooks"]["b1"]["callback_url"]
-    mock_trello.get(f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": True, "callbackURL": url}, repeat=True)
+    mock_trello.get(
+        f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": True, "callbackURL": url}, repeat=True
+    )
     assert await hass.config_entries.async_reload(webhook_entry.entry_id)
     await hass.async_block_till_done()
     assert calls(mock_trello, "DELETE", f"{WEBHOOKS_URL}/w1") == []
@@ -213,7 +245,11 @@ async def test_board_removal_deletes_webhook(hass, setup_credentials, mock_trell
     b2_hook = entry.data["webhooks"]["b2"]["trello_webhook_id"]
     url_b1 = entry.data["webhooks"]["b1"]["callback_url"]
     b1_hook = entry.data["webhooks"]["b1"]["trello_webhook_id"]
-    mock_trello.get(f"{WEBHOOKS_URL}/{b1_hook}", payload={"id": b1_hook, "active": True, "callbackURL": url_b1}, repeat=True)
+    mock_trello.get(
+        f"{WEBHOOKS_URL}/{b1_hook}",
+        payload={"id": b1_hook, "active": True, "callbackURL": url_b1},
+        repeat=True,
+    )
     mock_trello.delete(f"{WEBHOOKS_URL}/{b2_hook}", payload={})
     hass.config_entries.async_remove_subentry(entry, subentry_id(entry, "b2"))
     await hass.async_block_till_done()
@@ -244,7 +280,9 @@ def test_signature_matches_trello_scheme():
     import hmac
 
     body, url = b'{"a":1}', "https://x/y"
-    expected = base64.b64encode(hmac.new(b"secret", body + url.encode(), hashlib.sha1).digest()).decode()
+    expected = base64.b64encode(
+        hmac.new(b"secret", body + url.encode(), hashlib.sha1).digest()
+    ).decode()
     assert signature("secret", body, url) == expected
 
 
@@ -256,32 +294,55 @@ CLOUD = "custom_components.trello_todo.webhooks"
 def _store(hass, entry, url, *, webhook_id="hid", trello_id="w1"):
     hass.config_entries.async_update_entry(
         entry,
-        data={**entry.data, "webhooks": {"b1": {"webhook_id": webhook_id, "trello_webhook_id": trello_id, "callback_url": url}}},
+        data={
+            **entry.data,
+            "webhooks": {
+                "b1": {
+                    "webhook_id": webhook_id,
+                    "trello_webhook_id": trello_id,
+                    "callback_url": url,
+                }
+            },
+        },
     )
 
 
-async def test_restart_with_cloud_not_yet_connected_reuses_cloudhook(hass, setup_credentials, mock_trello):
+async def test_restart_with_cloud_not_yet_connected_reuses_cloudhook(
+    hass, setup_credentials, mock_trello
+):
     """C1: at boot Nabu Casa isn't connected yet; the stored cloudhook webhook must survive."""
     entry = make_entry(hass)
     url = "https://hooks.nabu.casa/stored"
     _store(hass, entry, url)
-    mock_trello.get(f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": True, "callbackURL": url}, repeat=True)
+    mock_trello.get(
+        f"{WEBHOOKS_URL}/w1", payload={"id": "w1", "active": True, "callbackURL": url}, repeat=True
+    )
     with (
         patch(f"{CLOUD}._cloud_active", return_value=True),
-        patch(f"{CLOUD}._create_cloudhook", AsyncMock(side_effect=HomeAssistantError("not connected"))),
+        patch(
+            f"{CLOUD}._create_cloudhook", AsyncMock(side_effect=HomeAssistantError("not connected"))
+        ),
     ):
         await _setup(hass, entry, mock_trello)
     assert calls(mock_trello, "POST", WEBHOOKS_URL) == []
     assert calls(mock_trello, "DELETE", f"{WEBHOOKS_URL}/w1") == []
-    assert entry.data["webhooks"]["b1"] == {"webhook_id": "hid", "trello_webhook_id": "w1", "callback_url": url}
+    assert entry.data["webhooks"]["b1"] == {
+        "webhook_id": "hid",
+        "trello_webhook_id": "w1",
+        "callback_url": url,
+    }
     assert _coordinator(entry).mode == MODE_WEBHOOK
 
 
-async def test_cloud_not_connected_on_first_creation_waits(hass, setup_credentials, mock_trello, external_url):
+async def test_cloud_not_connected_on_first_creation_waits(
+    hass, setup_credentials, mock_trello, external_url
+):
     entry = make_entry(hass)
     with (
         patch(f"{CLOUD}._cloud_active", return_value=True),
-        patch(f"{CLOUD}._create_cloudhook", AsyncMock(side_effect=HomeAssistantError("not connected"))),
+        patch(
+            f"{CLOUD}._create_cloudhook", AsyncMock(side_effect=HomeAssistantError("not connected"))
+        ),
     ):
         await _setup(hass, entry, mock_trello)
     assert calls(mock_trello, "POST", WEBHOOKS_URL) == []
@@ -291,10 +352,14 @@ async def test_cloud_not_connected_on_first_creation_waits(hass, setup_credentia
 
 async def test_existing_cloudhook_without_url_is_recreated(hass, setup_credentials, mock_trello):
     entry = make_entry(hass)
-    hass.config_entries.async_update_entry(entry, data={**entry.data, "webhooks": {"b1": {"webhook_id": "hid"}}})
+    hass.config_entries.async_update_entry(
+        entry, data={**entry.data, "webhooks": {"b1": {"webhook_id": "hid"}}}
+    )
     mock_trello.post(CREATE_URL, payload={"id": "w1", "active": True})
     delete = AsyncMock()
-    create = AsyncMock(side_effect=[ValueError("Hook is already enabled"), "https://hooks.nabu.casa/new"])
+    create = AsyncMock(
+        side_effect=[ValueError("Hook is already enabled"), "https://hooks.nabu.casa/new"]
+    )
     with (
         patch(f"{CLOUD}._cloud_active", return_value=True),
         patch(f"{CLOUD}._create_cloudhook", create),
@@ -306,10 +371,14 @@ async def test_existing_cloudhook_without_url_is_recreated(hass, setup_credentia
     assert _coordinator(entry).mode == MODE_WEBHOOK
 
 
-async def test_lost_webhook_is_retired_with_410(hass, hass_client_no_auth, setup_credentials, mock_trello, external_url):
+async def test_lost_webhook_is_retired_with_410(
+    hass, hass_client_no_auth, setup_credentials, mock_trello, external_url
+):
     """I1: HA answers 200 for unknown webhook ids, so the orphan must be answered 410 explicitly."""
     entry = make_entry(hass)
-    mock_trello.post(CREATE_URL, status=400, body="A webhook with that callback, model, and token already exists")
+    mock_trello.post(
+        CREATE_URL, status=400, body="A webhook with that callback, model, and token already exists"
+    )
     mock_trello.post(CREATE_URL, payload={"id": "w2", "active": True})
     await _setup(hass, entry, mock_trello)
     old_url = calls(mock_trello, "POST", WEBHOOKS_URL)[0].kwargs["params"]["callbackURL"]
@@ -319,7 +388,9 @@ async def test_lost_webhook_is_retired_with_410(hass, hass_client_no_auth, setup
     assert (await client.post(f"/api/webhook/{old_id}", data=b"{}")).status == 410
 
 
-async def test_failed_delete_on_board_removal_retires(hass, hass_client_no_auth, setup_credentials, mock_trello, external_url):
+async def test_failed_delete_on_board_removal_retires(
+    hass, hass_client_no_auth, setup_credentials, mock_trello, external_url
+):
     entry = make_entry(hass, board_subentry(), board_subentry("b2", "Projects", "archive", None))
     mock_trello.post(CREATE_URL, payload={"id": "w1", "active": True})
     mock_trello.post(CREATE_URL, payload={"id": "w2", "active": True})
@@ -338,7 +409,9 @@ async def test_failed_delete_on_board_removal_retires(hass, hass_client_no_auth,
     assert (await client.post(f"/api/webhook/{b2['webhook_id']}", data=b"{}")).status == 410
 
 
-async def test_transient_health_error_keeps_webhook(hass, setup_credentials, mock_trello, external_url):
+async def test_transient_health_error_keeps_webhook(
+    hass, setup_credentials, mock_trello, external_url
+):
     """I2: a Trello blip must not tear down a working webhook."""
     entry = make_entry(hass)
     _store(hass, entry, f"{EXTERNAL}/api/webhook/hid")
@@ -365,10 +438,17 @@ async def test_unloaded_manager_does_nothing(hass, webhook_entry, mock_trello):
 async def test_failure_reason_is_a_code(hass, setup_credentials, mock_trello, external_url, caplog):
     """I4: Trello's error text (which can quote the callback URL) never reaches logs or diagnostics."""
     entry = make_entry(hass)
-    mock_trello.post(CREATE_URL, status=400, body=f"URL ({EXTERNAL}/api/webhook/x) did not return 200", repeat=True)
+    mock_trello.post(
+        CREATE_URL,
+        status=400,
+        body=f"URL ({EXTERNAL}/api/webhook/x) did not return 200",
+        repeat=True,
+    )
     await _setup(hass, entry, mock_trello)
     assert entry.runtime_data.webhooks.failures == {"b1": "rejected"}
-    assert not any("ha.example.org" in r.getMessage() for r in caplog.records if r.levelno >= logging.INFO)
+    assert not any(
+        "ha.example.org" in r.getMessage() for r in caplog.records if r.levelno >= logging.INFO
+    )
 
 
 async def test_signature_mismatch_falls_back_to_feed(hass, hass_client_no_auth, webhook_entry):
@@ -379,11 +459,15 @@ async def test_signature_mismatch_falls_back_to_feed(hass, hass_client_no_auth, 
     coordinator = _coordinator(webhook_entry)
     assert coordinator.mode == MODE_FEED
     assert webhook_entry.runtime_data.webhooks.failures["b1"] == "signature_mismatch"
-    await webhook_entry.runtime_data.webhooks.async_ensure(coordinator)  # health check keeps it on the feed
+    await webhook_entry.runtime_data.webhooks.async_ensure(
+        coordinator
+    )  # health check keeps it on the feed
     assert coordinator.mode == MODE_FEED
 
 
-async def test_empty_client_secret_refuses_webhooks(hass, setup_credentials, mock_trello, external_url):
+async def test_empty_client_secret_refuses_webhooks(
+    hass, setup_credentials, mock_trello, external_url
+):
     entry = make_entry(hass)
     with patch(f"{CLOUD}.get_url", side_effect=NoURLAvailableError):
         await _setup(hass, entry, mock_trello)
@@ -399,11 +483,19 @@ async def test_entry_removal_refreshes_expired_token(hass, webhook_entry, mock_t
     """I7: async_remove_entry runs after the entry is gone, so OAuth2Session can't persist a refresh."""
     hass.config_entries.async_update_entry(
         webhook_entry,
-        data={**webhook_entry.data, "token": {**webhook_entry.data["token"], "expires_at": time.time() - 10}},
+        data={
+            **webhook_entry.data,
+            "token": {**webhook_entry.data["token"], "expires_at": time.time() - 10},
+        },
     )
     mock_trello.post(
         TOKEN_URL,
-        payload={"access_token": "fresh", "refresh_token": "r2", "expires_in": 3600, "token_type": "Bearer"},
+        payload={
+            "access_token": "fresh",
+            "refresh_token": "r2",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        },
         repeat=True,
     )
     mock_trello.delete(f"{WEBHOOKS_URL}/w1", payload={})
@@ -445,12 +537,17 @@ async def test_cloudhook_delivery_mock_request(hass, webhook_entry):
     from homeassistant.util.aiohttp import MockRequest
 
     body = json.dumps(
-        {"action": action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="On it 🚀")}, ensure_ascii=False
+        {"action": action("a1", "commentCard", card=CARD, list=ALEX_LIST, text="On it 🚀")},
+        ensure_ascii=False,
     ).encode("utf-8")
     state = webhook_entry.data["webhooks"]["b1"]
     sig = signature(CLIENT_SECRET, body, state["callback_url"])
-    request = MockRequest(content=body, mock_source="cloudhook", method="POST", headers={"X-Trello-Webhook": sig})
-    response = await webhook_entry.runtime_data.webhooks._async_handle(hass, state["webhook_id"], request)
+    request = MockRequest(
+        content=body, mock_source="cloudhook", method="POST", headers={"X-Trello-Webhook": sig}
+    )
+    response = await webhook_entry.runtime_data.webhooks._async_handle(
+        hass, state["webhook_id"], request
+    )
     assert response.status == 200
     await hass.async_block_till_done()
     attrs = hass.states.get("event.household_activity").attributes

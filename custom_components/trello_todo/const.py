@@ -1,4 +1,5 @@
 """Constants for the Trello integration."""
+
 from typing import Final
 
 DOMAIN: Final = "trello_todo"
@@ -6,7 +7,12 @@ SUBENTRY_BOARD: Final = "board"
 
 OAUTH2_AUTHORIZE: Final = "https://auth.atlassian.com/authorize"
 OAUTH2_TOKEN: Final = "https://auth.atlassian.com/oauth/token"
-OAUTH2_SCOPES: Final = ["read:member:trello", "read:board:trello", "write:board:trello", "offline_access"]
+OAUTH2_SCOPES: Final = [
+    "read:member:trello",
+    "read:board:trello",
+    "write:board:trello",
+    "offline_access",
+]
 TRELLO_APPS_URL: Final = "https://trello.com/apps/admin"
 MY_REDIRECT_URL: Final = "https://my.home-assistant.io/redirect/oauth"
 

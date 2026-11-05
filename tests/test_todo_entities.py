@@ -1,8 +1,10 @@
 """Tests for to-do entities: one per open list, kept in step with the board."""
+
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from custom_components.trello_todo.const import DOMAIN
 
@@ -16,8 +18,8 @@ from .common import (
     board_url,
     card,
     make_entry,
-    subentry_id,
     second_board,
+    subentry_id,
 )
 
 ALEX = "todo.alex"
@@ -74,7 +76,9 @@ async def test_item_mapping_in_pos_order(hass, loaded):
 
 
 async def test_done_list_items_are_completed(hass, loaded):
-    assert await _items(hass, DONE) == [{"uid": "c9", "summary": "Old thing", "status": "completed"}]
+    assert await _items(hass, DONE) == [
+        {"uid": "c9", "summary": "Old thing", "status": "completed"}
+    ]
     attrs = hass.states.get(DONE).attributes
     assert attrs["items_total"] == 1
     assert attrs["items"][0]["uid"] == "c9"
@@ -113,7 +117,12 @@ async def test_no_secrets_in_attributes(hass, loaded):
 
 
 async def test_new_list_appears(hass, loaded, mock_trello):
-    await _refresh_with(hass, loaded, mock_trello, board(lists=[*LISTS, {"id": "l_groc", "name": "Groceries", "pos": 4}]))
+    await _refresh_with(
+        hass,
+        loaded,
+        mock_trello,
+        board(lists=[*LISTS, {"id": "l_groc", "name": "Groceries", "pos": 4}]),
+    )
     assert hass.states.get("todo.groceries").state == "0"
 
 
@@ -128,7 +137,12 @@ async def test_stale_registry_entries_removed_at_startup(hass, entry, mock_trell
     """Review Focus 2: a list archived while HA was down leaves no dead entity."""
     registry = er.async_get(hass)
     stale = registry.async_get_or_create(
-        "todo", DOMAIN, "l_gone", config_entry=entry, config_subentry_id=subentry_id(entry, "b1"), suggested_object_id="gone"
+        "todo",
+        DOMAIN,
+        "l_gone",
+        config_entry=entry,
+        config_subentry_id=subentry_id(entry, "b1"),
+        suggested_object_id="gone",
     )
     mock_trello.get(BOARD_URL, payload=board(), repeat=True)
     assert await hass.config_entries.async_setup(entry.entry_id)
@@ -139,7 +153,9 @@ async def test_stale_registry_entries_removed_at_startup(hass, entry, mock_trell
 
 async def test_same_list_name_on_two_boards(hass, load_entry):
     await load_entry(
-        board_subentry(), SECOND, b2=second_board(lists=[{"id": "l_w_alex", "name": "Alex", "pos": 1}], cards=[])
+        board_subentry(),
+        SECOND,
+        b2=second_board(lists=[{"id": "l_w_alex", "name": "Alex", "pos": 1}], cards=[]),
     )
     registry = er.async_get(hass)
     assert registry.async_get_entity_id("todo", DOMAIN, "l_alex") == "todo.alex"
@@ -182,15 +198,18 @@ async def test_list_moved_between_boards(hass, load_entry, mock_trello):
     entry = await load_entry(board_subentry(), SECOND)
     moved = {"id": "l_sam", "name": "Sam", "pos": 3}
     mock_trello.clear()
-    mock_trello.get(board_url("b2"), payload=second_board(lists=[*second_board()["lists"], moved]), repeat=True)
+    mock_trello.get(
+        board_url("b2"), payload=second_board(lists=[*second_board()["lists"], moved]), repeat=True
+    )
     mock_trello.get(BOARD_URL, payload=board(lists=[LISTS[0], LISTS[2]]), repeat=True)
     for board_id in ("b2", "b1", "b2"):
         await _coordinator(entry, board_id).async_refresh()
         await hass.async_block_till_done()
-    reg = er.async_get(hass).async_get(er.async_get(hass).async_get_entity_id("todo", DOMAIN, "l_sam"))
+    reg = er.async_get(hass).async_get(
+        er.async_get(hass).async_get_entity_id("todo", DOMAIN, "l_sam")
+    )
     assert reg.config_subentry_id == subentry_id(entry, "b2")
     assert hass.states.get(reg.entity_id) is not None
-
 
 
 async def test_list_cleanup_keeps_other_platform_entities(hass, loaded):

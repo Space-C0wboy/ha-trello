@@ -1,4 +1,5 @@
 """Tests for the per-board due-date calendar."""
+
 from datetime import date, timedelta
 from unittest.mock import AsyncMock
 
@@ -17,8 +18,22 @@ NOW = "2026-10-14T15:00:00+00:00"  # 10:00 in Chicago
 
 CARDS = [
     card("c1", "Pay bill", "l_alex", 1, desc="Water", due="2026-10-15T22:00:00.000Z"),
-    card("c2", "Paint fence", "l_sam", 1, due="2026-10-16T22:00:00.000Z", start="2026-10-16T14:00:00.000Z"),
-    card("c3", "Bad start", "l_sam", 2, due="2026-10-17T22:00:00.000Z", start="2026-10-18T14:00:00.000Z"),
+    card(
+        "c2",
+        "Paint fence",
+        "l_sam",
+        1,
+        due="2026-10-16T22:00:00.000Z",
+        start="2026-10-16T14:00:00.000Z",
+    ),
+    card(
+        "c3",
+        "Bad start",
+        "l_sam",
+        2,
+        due="2026-10-17T22:00:00.000Z",
+        start="2026-10-18T14:00:00.000Z",
+    ),
     card("c4", "Ticked", "l_alex", 2, due="2026-10-13T15:00:00.000Z", due_complete=True),
     card("c5", "Filed", "l_done", 1, due="2026-10-12T15:00:00.000Z"),
     card("c6", "No due", "l_alex", 3),
@@ -42,8 +57,11 @@ def _entity(hass):
 
 async def _events(hass, start="2026-10-01T00:00:00+00:00", end="2026-11-01T00:00:00+00:00"):
     resp = await hass.services.async_call(
-        "calendar", "get_events", {"entity_id": CAL, "start_date_time": start, "end_date_time": end},
-        blocking=True, return_response=True,
+        "calendar",
+        "get_events",
+        {"entity_id": CAL, "start_date_time": start, "end_date_time": end},
+        blocking=True,
+        return_response=True,
     )
     return resp[CAL]["events"]
 
@@ -67,15 +85,21 @@ async def test_events_built_from_cards(hass, cal):
     assert set(events) == {"Pay bill", "Paint fence", "Bad start", "✓ Ticked", "✓ Filed"}
     pay = events["Pay bill"]
     assert dt_util.parse_datetime(pay["end"]) == dt_util.parse_datetime("2026-10-15T22:00:00+00:00")
-    assert dt_util.parse_datetime(pay["start"]) == dt_util.parse_datetime("2026-10-15T21:30:00+00:00")
+    assert dt_util.parse_datetime(pay["start"]) == dt_util.parse_datetime(
+        "2026-10-15T21:30:00+00:00"
+    )
     assert pay["description"] == "Water\n\nList: Alex\nhttps://trello.com/c/c1"
     fence = events["Paint fence"]
-    assert dt_util.parse_datetime(fence["start"]) == dt_util.parse_datetime("2026-10-16T14:00:00+00:00")
+    assert dt_util.parse_datetime(fence["start"]) == dt_util.parse_datetime(
+        "2026-10-16T14:00:00+00:00"
+    )
 
 
 async def test_start_after_due_falls_back_to_default(hass, cal):
     bad = _by_summary(await _events(hass))["Bad start"]
-    assert dt_util.parse_datetime(bad["start"]) == dt_util.parse_datetime("2026-10-17T21:30:00+00:00")
+    assert dt_util.parse_datetime(bad["start"]) == dt_util.parse_datetime(
+        "2026-10-17T21:30:00+00:00"
+    )
 
 
 async def test_range_filter(hass, cal):
@@ -96,20 +120,32 @@ async def test_state_and_next_event(hass, cal, freezer):
 async def test_update_via_websocket(hass, cal, mock_trello, hass_ws_client):
     mock_trello.put(card_url("c1"), payload={})
     client = await hass_ws_client(hass)
-    await client.send_json_auto_id({
-        "type": "calendar/event/update", "entity_id": CAL, "uid": "c1",
-        "event": {"summary": "Pay bill", "dtstart": "2026-10-20T09:00:00-05:00", "dtend": "2026-10-20T09:30:00-05:00"},
-    })
+    await client.send_json_auto_id(
+        {
+            "type": "calendar/event/update",
+            "entity_id": CAL,
+            "uid": "c1",
+            "event": {
+                "summary": "Pay bill",
+                "dtstart": "2026-10-20T09:00:00-05:00",
+                "dtend": "2026-10-20T09:30:00-05:00",
+            },
+        }
+    )
     assert (await client.receive_json())["success"]
-    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"due": "2026-10-20T14:30:00+00:00", "start": None}]
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [
+        {"due": "2026-10-20T14:30:00+00:00", "start": None}
+    ]
 
 
 async def test_update_longer_event_sets_start(hass, cal, mock_trello):
     mock_trello.put(card_url("c1"), payload={})
     await _entity(hass).async_update_event(
         "c1",
-        {"dtstart": dt_util.parse_datetime("2026-10-20T13:00:00+00:00"),
-         "dtend": dt_util.parse_datetime("2026-10-20T14:30:00+00:00")},
+        {
+            "dtstart": dt_util.parse_datetime("2026-10-20T13:00:00+00:00"),
+            "dtend": dt_util.parse_datetime("2026-10-20T14:30:00+00:00"),
+        },
     )
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [
         {"due": "2026-10-20T14:30:00+00:00", "start": "2026-10-20T13:00:00+00:00"}
@@ -119,10 +155,14 @@ async def test_update_longer_event_sets_start(hass, cal, mock_trello):
 @pytest.mark.parametrize(
     "event",
     [
-        {"dtstart": dt_util.parse_datetime("2026-10-20T14:30:00+00:00"),
-         "dtend": dt_util.parse_datetime("2026-10-20T13:00:00+00:00")},
-        {"dtstart": dt_util.parse_datetime("2026-10-20T14:30:00+00:00"),
-         "dtend": dt_util.parse_datetime("2026-10-20T14:30:00+00:00")},
+        {
+            "dtstart": dt_util.parse_datetime("2026-10-20T14:30:00+00:00"),
+            "dtend": dt_util.parse_datetime("2026-10-20T13:00:00+00:00"),
+        },
+        {
+            "dtstart": dt_util.parse_datetime("2026-10-20T14:30:00+00:00"),
+            "dtend": dt_util.parse_datetime("2026-10-20T14:30:00+00:00"),
+        },
     ],
 )
 async def test_update_bad_times_rejected(hass, cal, mock_trello, event):
@@ -134,7 +174,9 @@ async def test_update_bad_times_rejected(hass, cal, mock_trello, event):
 
 async def test_update_all_day_rejected(hass, cal, mock_trello):
     with pytest.raises(ServiceValidationError) as info:
-        await _entity(hass).async_update_event("c1", {"dtstart": date(2026, 10, 20), "dtend": date(2026, 10, 21)})
+        await _entity(hass).async_update_event(
+            "c1", {"dtstart": date(2026, 10, 20), "dtend": date(2026, 10, 21)}
+        )
     assert info.value.translation_key == "invalid_event_times"
     assert calls(mock_trello, "PUT", f"{API}/cards/c1") == []
 
@@ -153,8 +195,10 @@ async def test_update_mirrors_locally(hass, cal, mock_trello):
     mock_trello.put(card_url("c1"), payload={})
     await _entity(hass).async_update_event(
         "c1",
-        {"dtstart": dt_util.parse_datetime("2026-10-20T14:00:00+00:00"),
-         "dtend": dt_util.parse_datetime("2026-10-20T14:30:00+00:00")},
+        {
+            "dtstart": dt_util.parse_datetime("2026-10-20T14:00:00+00:00"),
+            "dtend": dt_util.parse_datetime("2026-10-20T14:30:00+00:00"),
+        },
     )
     events = await _events(hass, "2026-10-20T00:00:00+00:00", "2026-10-21T00:00:00+00:00")
     assert [e["summary"] for e in events] == ["Pay bill"]
@@ -185,7 +229,10 @@ async def test_auth_error_starts_reauth(hass, cal, mock_trello):
         await _entity(hass).async_delete_event("c1")
     assert info.value.translation_key == "auth_failed"
     await hass.async_block_till_done()
-    assert any(f["context"]["source"] == "reauth" for f in hass.config_entries.flow.async_progress_by_handler(DOMAIN))
+    assert any(
+        f["context"]["source"] == "reauth"
+        for f in hass.config_entries.flow.async_progress_by_handler(DOMAIN)
+    )
 
 
 async def test_unavailable_when_board_inaccessible(hass, cal, mock_trello):
@@ -206,7 +253,9 @@ async def test_update_across_fall_back_hour(hass, cal, mock_trello):
     end = dt_util.as_local(dt_util.parse_datetime("2026-11-01T07:10:00+00:00"))
     assert start.tzinfo is end.tzinfo and start.replace(tzinfo=None) > end.replace(tzinfo=None)
     await _entity(hass).async_update_event("c1", {"dtstart": start, "dtend": end})
-    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"due": "2026-11-01T07:10:00+00:00", "start": None}]
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [
+        {"due": "2026-11-01T07:10:00+00:00", "start": None}
+    ]
 
 
 async def test_card_not_found_names_the_card(hass, cal, mock_trello):

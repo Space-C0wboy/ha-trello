@@ -1,4 +1,5 @@
 """Tests for diagnostics."""
+
 from custom_components.trello_todo.diagnostics import async_get_config_entry_diagnostics
 
 from .common import ACCESS_TOKEN, CLIENT_SECRET, REFRESH_TOKEN, subentry_id
@@ -49,7 +50,10 @@ async def test_diagnostics_webhook_state_redacted(hass, setup_credentials, mock_
     entry = make_entry(hass)
     mock_trello.get(BOARD_URL, payload=board(), repeat=True)
     mock_trello.get(actions_url("b1"), payload=[], repeat=True)
-    mock_trello.post(re.compile(r"^https://api\.trello\.com/1/webhooks(\?.*)?$"), payload={"id": "w1", "active": True})
+    mock_trello.post(
+        re.compile(r"^https://api\.trello\.com/1/webhooks(\?.*)?$"),
+        payload={"id": "w1", "active": True},
+    )
     assert await hass.config_entries.async_setup(entry.entry_id)
     await hass.async_block_till_done()
     diag = await async_get_config_entry_diagnostics(hass, entry)

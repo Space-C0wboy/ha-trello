@@ -1,4 +1,5 @@
 """Minimal typed async client for the Trello REST API (no Home Assistant imports)."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable, Iterable
@@ -101,9 +102,13 @@ class TrelloBoard:
     id: str
     name: str
     lists: dict[str, str]  # list id -> name, in board order
-    cards: dict[str, list[TrelloCard]] = field(default_factory=dict)  # list id -> cards in pos order
+    cards: dict[str, list[TrelloCard]] = field(
+        default_factory=dict
+    )  # list id -> cards in pos order
     members: dict[str, str] = field(default_factory=dict)  # member id -> full name
-    labels: dict[str, TrelloLabel] = field(default_factory=dict)  # label id -> label (all board labels)
+    labels: dict[str, TrelloLabel] = field(
+        default_factory=dict
+    )  # label id -> label (all board labels)
     member_usernames: dict[str, str] = field(default_factory=dict)  # member id -> username
 
     def card(self, card_id: str) -> TrelloCard | None:
@@ -114,7 +119,9 @@ class TrelloBoard:
         return None
 
 
-def parse_card(raw: dict[str, Any], labels: dict[str, TrelloLabel], initials: dict[str, str]) -> TrelloCard:
+def parse_card(
+    raw: dict[str, Any], labels: dict[str, TrelloLabel], initials: dict[str, str]
+) -> TrelloCard:
     return TrelloCard(
         id=raw["id"],
         name=raw.get("name") or "",
@@ -133,10 +140,15 @@ def parse_card(raw: dict[str, Any], labels: dict[str, TrelloLabel], initials: di
 
 def parse_board(raw: dict[str, Any]) -> TrelloBoard:
     """Turn the nested GET /boards/{id} response into a TrelloBoard."""
-    labels = {lb["id"]: TrelloLabel(lb.get("name") or "", lb.get("color")) for lb in raw.get("labels", [])}
+    labels = {
+        lb["id"]: TrelloLabel(lb.get("name") or "", lb.get("color")) for lb in raw.get("labels", [])
+    }
     initials = {m["id"]: m.get("initials") or "" for m in raw.get("members", [])}
     names = {m["id"]: m.get("fullName") or "" for m in raw.get("members", [])}
-    lists = {lst["id"]: lst["name"] for lst in sorted(raw.get("lists", []), key=lambda lst: lst.get("pos", 0))}
+    lists = {
+        lst["id"]: lst["name"]
+        for lst in sorted(raw.get("lists", []), key=lambda lst: lst.get("pos", 0))
+    }
     cards: dict[str, list[TrelloCard]] = {list_id: [] for list_id in lists}
     for c in raw.get("cards", []):
         if c["idList"] in cards:
@@ -162,19 +174,30 @@ class TrelloClient:
         self._get_token = get_token
 
     async def _request(
-        self, method: str, path: str, params: dict[str, Any] | None = None, json: dict[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
     ) -> Any:
         # Outside the try: a failed token refresh must reach the HA layer unchanged.
         # The token lives only in this header, never in the URL, so it can't leak into logs or exceptions.
         headers = {"Authorization": f"Bearer {await self._get_token()}"}
         try:
             async with self._session.request(
-                method, f"{BASE_URL}{path}", params=params, json=json, headers=headers, timeout=TIMEOUT
+                method,
+                f"{BASE_URL}{path}",
+                params=params,
+                json=json,
+                headers=headers,
+                timeout=TIMEOUT,
             ) as resp:
                 if resp.status == 401:
                     raise TrelloAuthError("Trello rejected the access token", 401)
                 if resp.status in (403, 404):
-                    raise TrelloAccessError(f"Trello returned HTTP {resp.status} for {method} {path}", resp.status)
+                    raise TrelloAccessError(
+                        f"Trello returned HTTP {resp.status} for {method} {path}", resp.status
+                    )
                 if resp.status == 429:
                     retry_after = resp.headers.get("Retry-After")
                     raise TrelloRateLimitError(float(retry_after) if retry_after else None)
@@ -184,7 +207,10 @@ class TrelloClient:
                     text = (await resp.text())[:200]
                     if resp.status == 400 and "already exists" in text:
                         raise TrelloWebhookExistsError("Trello already has this webhook", 400)
-                    raise TrelloError(f"Trello returned HTTP {resp.status} for {method} {path}: {text}", resp.status)
+                    raise TrelloError(
+                        f"Trello returned HTTP {resp.status} for {method} {path}: {text}",
+                        resp.status,
+                    )
                 return await resp.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError) as err:
             raise TrelloConnectionError(f"Error talking to Trello: {type(err).__name__}") from None
@@ -193,10 +219,14 @@ class TrelloClient:
         return await self._request("GET", "/members/me", {"fields": "id,username,fullName"})
 
     async def get_boards(self) -> list[dict[str, Any]]:
-        return await self._request("GET", "/members/me/boards", {"filter": "open", "fields": "name"})
+        return await self._request(
+            "GET", "/members/me/boards", {"filter": "open", "fields": "name"}
+        )
 
     async def get_lists(self, board_id: str) -> list[dict[str, Any]]:
-        return await self._request("GET", f"/boards/{board_id}/lists", {"filter": "open", "fields": "name,pos"})
+        return await self._request(
+            "GET", f"/boards/{board_id}/lists", {"filter": "open", "fields": "name,pos"}
+        )
 
     async def get_board(self, board_id: str) -> TrelloBoard:
         return parse_board(await self._request("GET", f"/boards/{board_id}", BOARD_PARAMS))
@@ -208,7 +238,9 @@ class TrelloClient:
         # Trello silently ignores JSON nulls; a cleared field (due, start) must go as `?field=null`.
         cleared = {key: "null" for key, value in fields.items() if value is None}
         body = {key: value for key, value in fields.items() if value is not None}
-        return await self._request("PUT", f"/cards/{card_id}", params=cleared or None, json=body or None)
+        return await self._request(
+            "PUT", f"/cards/{card_id}", params=cleared or None, json=body or None
+        )
 
     async def get_last_list_move(self, card_id: str) -> str | None:
         """The list a card was most recently moved out of, from its action history."""
@@ -220,9 +252,13 @@ class TrelloClient:
                 return list_id
         return None
 
-    async def create_webhook(self, callback_url: str, board_id: str, description: str) -> dict[str, Any]:
+    async def create_webhook(
+        self, callback_url: str, board_id: str, description: str
+    ) -> dict[str, Any]:
         return await self._request(
-            "POST", "/webhooks", {"callbackURL": callback_url, "idModel": board_id, "description": description}
+            "POST",
+            "/webhooks",
+            {"callbackURL": callback_url, "idModel": board_id, "description": description},
         )
 
     async def get_webhook(self, webhook_id: str) -> dict[str, Any]:
@@ -231,7 +267,9 @@ class TrelloClient:
     async def delete_webhook(self, webhook_id: str) -> None:
         await self._request("DELETE", f"/webhooks/{webhook_id}")
 
-    async def get_actions(self, board_id: str, since: str | None, action_types: Iterable[str]) -> list[dict[str, Any]]:
+    async def get_actions(
+        self, board_id: str, since: str | None, action_types: Iterable[str]
+    ) -> list[dict[str, Any]]:
         params = {
             "filter": ",".join(action_types),
             "limit": str(ACTIONS_PAGE_SIZE),
@@ -244,7 +282,9 @@ class TrelloClient:
             return await self._request("GET", f"/boards/{board_id}/actions", params)
         params["since"] = since
         actions: list[dict[str, Any]] = []
-        for _ in range(MAX_ACTION_PAGES):  # after an outage, page back instead of skipping older activity
+        for _ in range(
+            MAX_ACTION_PAGES
+        ):  # after an outage, page back instead of skipping older activity
             page = await self._request("GET", f"/boards/{board_id}/actions", params)
             actions.extend(page)
             if len(page) < ACTIONS_PAGE_SIZE:
@@ -252,11 +292,15 @@ class TrelloClient:
             params = {**params, "before": page[-1]["id"]}
         return actions
 
-    async def get_card(self, card_id: str, fields: str = "idBoard,idList,name,shortUrl,closed") -> dict[str, Any]:
+    async def get_card(
+        self, card_id: str, fields: str = "idBoard,idList,name,shortUrl,closed"
+    ) -> dict[str, Any]:
         return await self._request("GET", f"/cards/{card_id}", {"fields": fields})
 
     async def add_comment(self, card_id: str, text: str) -> dict[str, Any]:
-        return await self._request("POST", f"/cards/{card_id}/actions/comments", json={"text": text})
+        return await self._request(
+            "POST", f"/cards/{card_id}/actions/comments", json={"text": text}
+        )
 
     async def add_label(self, card_id: str, label_id: str) -> None:
         await self._request("POST", f"/cards/{card_id}/idLabels", json={"value": label_id})
@@ -281,7 +325,11 @@ class TrelloClient:
         return await self._request("POST", f"/cards/{card_id}/checklists", json={"name": name})
 
     async def add_check_item(self, checklist_id: str, name: str) -> dict[str, Any]:
-        return await self._request("POST", f"/checklists/{checklist_id}/checkItems", json={"name": name})
+        return await self._request(
+            "POST", f"/checklists/{checklist_id}/checkItems", json={"name": name}
+        )
 
     async def set_check_item(self, card_id: str, item_id: str, state: str) -> dict[str, Any]:
-        return await self._request("PUT", f"/cards/{card_id}/checkItem/{item_id}", json={"state": state})
+        return await self._request(
+            "PUT", f"/cards/{card_id}/checkItem/{item_id}", json={"state": state}
+        )

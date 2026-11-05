@@ -1,4 +1,5 @@
 """Writes from HA show up immediately, before any refresh."""
+
 from unittest.mock import AsyncMock
 
 import pytest

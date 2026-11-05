@@ -1,4 +1,5 @@
 """Shared test fixtures."""
+
 from collections.abc import Generator
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -6,13 +7,25 @@ from unittest.mock import patch
 import pytest
 from aiohttp import ClientResponse
 from aioresponses import aioresponses
-from homeassistant.components.application_credentials import ClientCredential, async_import_client_credential
+from homeassistant.components.application_credentials import (
+    ClientCredential,
+    async_import_client_credential,
+)
 from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.trello_todo.const import DOMAIN
 
-from .common import BOARD_URL, CLIENT_ID, CLIENT_SECRET, actions_url, board, board_url, make_entry, second_board
+from .common import (
+    BOARD_URL,
+    CLIENT_ID,
+    CLIENT_SECRET,
+    actions_url,
+    board,
+    board_url,
+    make_entry,
+    second_board,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -38,14 +51,19 @@ class _Response(ClientResponse):
 @pytest.fixture
 def mock_trello() -> Generator[aioresponses]:
     # Localhost passes through so HA's test HTTP and websocket clients keep working.
-    with patch("aioresponses.core.ClientResponse", _Response), aioresponses(passthrough=["http://127.0.0.1"]) as mock:
+    with (
+        patch("aioresponses.core.ClientResponse", _Response),
+        aioresponses(passthrough=["http://127.0.0.1"]) as mock,
+    ):
         yield mock
 
 
 @pytest.fixture
 async def setup_credentials(hass) -> None:
     assert await async_setup_component(hass, "application_credentials", {})
-    await async_import_client_credential(hass, DOMAIN, ClientCredential(CLIENT_ID, CLIENT_SECRET), DOMAIN)
+    await async_import_client_credential(
+        hass, DOMAIN, ClientCredential(CLIENT_ID, CLIENT_SECRET), DOMAIN
+    )
 
 
 @pytest.fixture
@@ -58,7 +76,9 @@ def entry(hass, setup_credentials) -> MockConfigEntry:
 def load_entry(hass, setup_credentials, mock_trello):
     """Factory: create an entry with the given board sub-entries and set it up against mocked boards."""
 
-    async def _load(*subentries, b1: dict | None = None, b2: dict | None = None, expires_at=None) -> MockConfigEntry:
+    async def _load(
+        *subentries, b1: dict | None = None, b2: dict | None = None, expires_at=None
+    ) -> MockConfigEntry:
         entry = make_entry(hass, *subentries, expires_at=expires_at)
         mock_trello.get(BOARD_URL, payload=board() if b1 is None else b1, repeat=True)
         mock_trello.get(board_url("b2"), payload=second_board() if b2 is None else b2, repeat=True)

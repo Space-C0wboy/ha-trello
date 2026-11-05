@@ -1,4 +1,5 @@
 """Config flow for Trello: OAuth sign-in, board picking, reauth, account options."""
+
 from __future__ import annotations
 
 import logging
@@ -63,16 +64,21 @@ class TrelloFlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
 
     @classmethod
     @callback
-    def async_get_supported_subentry_types(cls, config_entry: ConfigEntry) -> dict[str, type[ConfigSubentryFlow]]:
+    def async_get_supported_subentry_types(
+        cls, config_entry: ConfigEntry
+    ) -> dict[str, type[ConfigSubentryFlow]]:
         return {SUBENTRY_BOARD: BoardSubentryFlow}
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
         return await self.async_step_reauth_confirm()
 
-    async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
         if user_input is None:
             return self.async_show_form(
-                step_id="reauth_confirm", description_placeholders={"account": self._get_reauth_entry().title}
+                step_id="reauth_confirm",
+                description_placeholders={"account": self._get_reauth_entry().title},
             )
         return await self.async_step_user()
 
@@ -117,7 +123,10 @@ class TrelloFlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
                 try:
                     subentries = [
                         ConfigSubentryData(
-                            data={CONF_BOARD_ID: board_id, **default_done_settings(await self._client.get_lists(board_id))},
+                            data={
+                                CONF_BOARD_ID: board_id,
+                                **default_done_settings(await self._client.get_lists(board_id)),
+                            },
                             subentry_type=SUBENTRY_BOARD,
                             title=self._boards[board_id],
                             unique_id=board_id,
@@ -137,7 +146,11 @@ class TrelloFlowHandler(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, doma
         return self.async_show_form(
             step_id="boards",
             data_schema=vol.Schema(
-                {vol.Required("boards", default=[]): SelectSelector(SelectSelectorConfig(options=options, multiple=True))}
+                {
+                    vol.Required("boards", default=[]): SelectSelector(
+                        SelectSelectorConfig(options=options, multiple=True)
+                    )
+                }
             ),
             errors=errors,
         )
@@ -148,7 +161,9 @@ class TrelloOptionsFlow(OptionsFlow):
 
     async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         if user_input is not None:
-            return self.async_create_entry(data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])})
+            return self.async_create_entry(
+                data={CONF_SCAN_INTERVAL: int(user_input[CONF_SCAN_INTERVAL])}
+            )
         current = self.config_entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
         schema = vol.Schema(
             {

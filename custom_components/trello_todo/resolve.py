@@ -1,4 +1,5 @@
 """Turn names into Trello ids: cards, boards, lists, labels, members. No Home Assistant imports."""
+
 from __future__ import annotations
 
 import re
@@ -33,7 +34,9 @@ def _pick(kind: str, value: str, candidates: Mapping[str, Iterable[str]], board:
     if value in candidates:
         return value
     wanted = value.strip().casefold()
-    hits = [cid for cid, names in candidates.items() if any(n and n.casefold() == wanted for n in names)]
+    hits = [
+        cid for cid, names in candidates.items() if any(n and n.casefold() == wanted for n in names)
+    ]
     if len(hits) == 1:
         return hits[0]
     if hits:
@@ -52,12 +55,18 @@ def resolve_list(board: TrelloBoard, value: str) -> str:
 def resolve_label(board: TrelloBoard, value: str) -> str:
     """Name or id; or a colour when exactly one unnamed label has it (Trello allows colour-only labels)."""
     try:
-        return _pick("label", value, {lid: (lb.name,) for lid, lb in board.labels.items()}, board.name)
+        return _pick(
+            "label", value, {lid: (lb.name,) for lid, lb in board.labels.items()}, board.name
+        )
     except ResolveError as err:
         if err.key != "label_not_found":
             raise
     wanted = value.strip().casefold()
-    unnamed = [lid for lid, lb in board.labels.items() if not lb.name and (lb.color or "").casefold() == wanted]
+    unnamed = [
+        lid
+        for lid, lb in board.labels.items()
+        if not lb.name and (lb.color or "").casefold() == wanted
+    ]
     if len(unnamed) == 1:
         return unnamed[0]
     if unnamed:
@@ -66,7 +75,9 @@ def resolve_label(board: TrelloBoard, value: str) -> str:
 
 
 def resolve_member(board: TrelloBoard, value: str) -> str:
-    candidates = {mid: (name, board.member_usernames.get(mid, "")) for mid, name in board.members.items()}
+    candidates = {
+        mid: (name, board.member_usernames.get(mid, "")) for mid, name in board.members.items()
+    }
     return _pick("member", value, candidates, board.name)
 
 

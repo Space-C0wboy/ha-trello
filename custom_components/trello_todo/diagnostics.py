@@ -1,4 +1,5 @@
 """Diagnostics: tokens and webhook URLs redacted, no card contents."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -12,7 +13,9 @@ from .coordinator import TrelloConfigEntry
 TO_REDACT = {"token", "webhooks"}
 
 
-async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: TrelloConfigEntry) -> dict[str, Any]:
+async def async_get_config_entry_diagnostics(
+    hass: HomeAssistant, entry: TrelloConfigEntry
+) -> dict[str, Any]:
     # runtime_data is missing while setup is retrying or failed, which is when diagnostics matter most.
     runtime = getattr(entry, "runtime_data", None)
     manager = runtime.webhooks if runtime else None
@@ -30,16 +33,25 @@ async def async_get_config_entry_diagnostics(hass: HomeAssistant, entry: TrelloC
                 "settings": dict(subentry.data),
                 "last_update_success": coordinator.last_update_success if coordinator else None,
                 "lists": dict(board.lists) if board else None,
-                "open_cards": {list_id: len(cards) for list_id, cards in board.cards.items()} if board else None,
+                "open_cards": {list_id: len(cards) for list_id, cards in board.cards.items()}
+                if board
+                else None,
                 "mode": coordinator.mode if coordinator else None,
                 "has_webhook": bool(
-                    (entry.data.get(CONF_WEBHOOKS) or {}).get(subentry.data[CONF_BOARD_ID], {}).get("trello_webhook_id")
+                    (entry.data.get(CONF_WEBHOOKS) or {})
+                    .get(subentry.data[CONF_BOARD_ID], {})
+                    .get("trello_webhook_id")
                 ),
-                "webhook_failure": manager.failures.get(subentry.data[CONF_BOARD_ID]) if manager else None,
+                "webhook_failure": manager.failures.get(subentry.data[CONF_BOARD_ID])
+                if manager
+                else None,
             }
         )
     return {
-        "entry": {"data": async_redact_data(dict(entry.data), TO_REDACT), "options": dict(entry.options)},
+        "entry": {
+            "data": async_redact_data(dict(entry.data), TO_REDACT),
+            "options": dict(entry.options),
+        },
         "boards": boards,
         "webhooks": {"bad_signatures": manager.bad_signatures if manager else 0},
     }

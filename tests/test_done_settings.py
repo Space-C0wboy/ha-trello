@@ -1,7 +1,11 @@
 """Tests for the per-board done-settings helpers."""
+
 import pytest
 
-from custom_components.trello_todo.subentry_flow import default_done_settings, done_settings_from_input
+from custom_components.trello_todo.subentry_flow import (
+    default_done_settings,
+    done_settings_from_input,
+)
 
 from .common import LISTS, LISTS_B2
 
@@ -23,9 +27,18 @@ def test_default_takes_first_done_list_by_position():
     ("user_input", "expected"),
     [
         ({"done_behavior": "move"}, ({}, {"done_list": "done_list_required"})),
-        ({"done_behavior": "move_and_archive", "done_list": ""}, ({}, {"done_list": "done_list_required"})),
-        ({"done_behavior": "archive", "done_list": "l_done"}, ({"done_behavior": "archive", "done_list": None}, {})),
-        ({"done_behavior": "move", "done_list": "l_done"}, ({"done_behavior": "move", "done_list": "l_done"}, {})),
+        (
+            {"done_behavior": "move_and_archive", "done_list": ""},
+            ({}, {"done_list": "done_list_required"}),
+        ),
+        (
+            {"done_behavior": "archive", "done_list": "l_done"},
+            ({"done_behavior": "archive", "done_list": None}, {}),
+        ),
+        (
+            {"done_behavior": "move", "done_list": "l_done"},
+            ({"done_behavior": "move", "done_list": "l_done"}, {}),
+        ),
     ],
 )
 def test_done_settings_from_input(user_input, expected):

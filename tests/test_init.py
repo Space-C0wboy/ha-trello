@@ -1,4 +1,5 @@
 """Tests for setup, per-board coordinators, token handling and error mapping."""
+
 import time
 
 from homeassistant.config_entries import SOURCE_REAUTH, ConfigEntryState
@@ -17,8 +18,8 @@ from .common import (
     board_url,
     calls,
     make_entry,
-    subentry_id,
     second_board,
+    subentry_id,
 )
 
 B2_URL = board_url("b2")
@@ -46,7 +47,12 @@ async def test_one_bearer_request_per_board(hass, setup_credentials, mock_trello
         assert req.kwargs["headers"]["Authorization"] == f"Bearer {ACCESS_TOKEN}"
     b1 = entry.runtime_data.boards[subentry_id(entry, "b1")]
     b2 = entry.runtime_data.boards[subentry_id(entry, "b2")]
-    assert (b1.board_id, b1.board_title, b1.done_behavior, b1.done_list) == ("b1", "Household", "move", "l_done")
+    assert (b1.board_id, b1.board_title, b1.done_behavior, b1.done_list) == (
+        "b1",
+        "Household",
+        "move",
+        "l_done",
+    )
     assert (b2.board_id, b2.done_behavior, b2.done_list) == ("b2", "archive", None)
     assert b1.data.lists["l_alex"] == "Alex"
 
@@ -109,7 +115,12 @@ async def test_expired_token_refreshed_before_request(hass, setup_credentials, m
     entry = make_entry(hass, expires_at=time.time() - 10)
     mock_trello.post(
         TOKEN_URL,
-        payload={"access_token": "new-access", "refresh_token": "new-refresh", "expires_in": 3600, "token_type": "Bearer"},
+        payload={
+            "access_token": "new-access",
+            "refresh_token": "new-refresh",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        },
     )
     mock_trello.get(BOARD_URL, payload=board())
     assert await _setup(hass, entry)
@@ -140,7 +151,9 @@ async def test_token_refresh_does_not_reload(hass, loaded):
 async def test_board_settings_change_reloads(hass, loaded):
     runtime = loaded.runtime_data
     sub = loaded.subentries[subentry_id(loaded, "b1")]
-    hass.config_entries.async_update_subentry(loaded, sub, data={**sub.data, "done_behavior": "archive", "done_list": None})
+    hass.config_entries.async_update_subentry(
+        loaded, sub, data={**sub.data, "done_behavior": "archive", "done_list": None}
+    )
     await hass.async_block_till_done()
     assert loaded.state is ConfigEntryState.LOADED
     assert loaded.runtime_data is not runtime

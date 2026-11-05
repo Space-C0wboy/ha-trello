@@ -1,4 +1,5 @@
 """Tests for the due-date summary sensors."""
+
 import time
 
 import pytest
@@ -9,8 +10,12 @@ from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
 from .common import BOARD_URL, board, card, subentry_id
 
-NOW = "2026-10-14T15:00:00+00:00"  # Wed 10:00 in Chicago; local midnight tonight = 2026-10-15T05:00Z
-OVERDUE, TODAY, SOON, NEXT = (f"sensor.household_{k}" for k in ("overdue", "due_today", "due_soon", "next_due"))
+NOW = (
+    "2026-10-14T15:00:00+00:00"  # Wed 10:00 in Chicago; local midnight tonight = 2026-10-15T05:00Z
+)
+OVERDUE, TODAY, SOON, NEXT = (
+    f"sensor.household_{k}" for k in ("overdue", "due_today", "due_soon", "next_due")
+)
 
 CARDS = [
     card("o1", "Late", "l_alex", 1, due="2026-10-13T15:00:00.000Z", members=["m1"]),
@@ -47,7 +52,12 @@ async def _tick(hass):
 
 async def test_entities_on_board_device(hass, sensors):
     registry = er.async_get(hass)
-    for entity_id, key in ((OVERDUE, "overdue"), (TODAY, "due_today"), (SOON, "due_soon"), (NEXT, "next_due")):
+    for entity_id, key in (
+        (OVERDUE, "overdue"),
+        (TODAY, "due_today"),
+        (SOON, "due_soon"),
+        (NEXT, "next_due"),
+    ):
         reg = registry.async_get(entity_id)
         assert reg.unique_id == f"b1_{key}"
         assert reg.config_subentry_id == subentry_id(sensors, "b1")
@@ -56,22 +66,36 @@ async def test_entities_on_board_device(hass, sensors):
 async def test_counts_and_windows(hass, sensors):
     assert hass.states.get(OVERDUE).state == "1"
     assert hass.states.get(TODAY).state == "2"  # t1, t2 (23:59 local)
-    assert hass.states.get(SOON).state == "2"  # s1 (exactly midnight), s3; s2 (exactly now + 7 days) excluded
+    assert (
+        hass.states.get(SOON).state == "2"
+    )  # s1 (exactly midnight), s3; s2 (exactly now + 7 days) excluded
 
 
 async def test_by_member_and_cards(hass, sensors):
     today = hass.states.get(TODAY).attributes
     assert today["by_member"] == {"Alex": 1, "Sam": 1, "Unassigned": 1}
     assert today["cards"] == [
-        {"name": "This afternoon", "due": "2026-10-14T20:00:00+00:00", "list": "Alex", "members": ["Sam", "Alex"]},
-        {"name": "Before midnight", "due": "2026-10-15T04:59:00+00:00", "list": "Sam", "members": []},
+        {
+            "name": "This afternoon",
+            "due": "2026-10-14T20:00:00+00:00",
+            "list": "Alex",
+            "members": ["Sam", "Alex"],
+        },
+        {
+            "name": "Before midnight",
+            "due": "2026-10-15T04:59:00+00:00",
+            "list": "Sam",
+            "members": [],
+        },
     ]
     assert hass.states.get(OVERDUE).attributes["by_member"] == {"Sam": 1}
 
 
 async def test_next_due(hass, sensors):
     state = hass.states.get(NEXT)
-    assert dt_util.parse_datetime(state.state) == dt_util.parse_datetime("2026-10-14T20:00:00+00:00")
+    assert dt_util.parse_datetime(state.state) == dt_util.parse_datetime(
+        "2026-10-14T20:00:00+00:00"
+    )
     assert state.attributes["card"] == "This afternoon"
     assert state.attributes["list"] == "Alex"
     assert state.attributes["members"] == ["Sam", "Alex"]
@@ -79,7 +103,9 @@ async def test_next_due(hass, sensors):
 
 
 async def test_next_due_unknown_when_nothing_ahead(hass, load_entry):
-    await load_entry(b1=board(cards=[card("o1", "Late", "l_alex", 1, due="2026-10-13T15:00:00.000Z")]))
+    await load_entry(
+        b1=board(cards=[card("o1", "Late", "l_alex", 1, due="2026-10-13T15:00:00.000Z")])
+    )
     assert hass.states.get(NEXT).state == "unknown"
     assert hass.states.get(TODAY).attributes["by_member"] == {}
 
@@ -102,14 +128,25 @@ async def test_tick_flips_card_to_overdue(hass, sensors, freezer):
 
 async def test_local_day_differs_from_utc_day(hass, load_entry, freezer):
     freezer.move_to("2026-10-15T03:00:00+00:00")  # Wed 22:00 in Chicago, already Thursday in UTC
-    await load_entry(b1=board(cards=[
-        card("a", "Late tonight", "l_alex", 1, due="2026-10-15T04:30:00.000Z"),  # Wed 23:30 local
-        card("b", "Early tomorrow", "l_alex", 2, due="2026-10-15T06:00:00.000Z"),  # Thu 01:00 local
-    ]), expires_at=LONG_TOKEN)
+    await load_entry(
+        b1=board(
+            cards=[
+                card(
+                    "a", "Late tonight", "l_alex", 1, due="2026-10-15T04:30:00.000Z"
+                ),  # Wed 23:30 local
+                card(
+                    "b", "Early tomorrow", "l_alex", 2, due="2026-10-15T06:00:00.000Z"
+                ),  # Thu 01:00 local
+            ]
+        ),
+        expires_at=LONG_TOKEN,
+    )
     _no_refresh_schedule(hass.config_entries.async_entries("trello_todo")[0])
     assert hass.states.get(TODAY).state == "1"
     assert hass.states.get(SOON).state == "1"
-    freezer.move_to("2026-10-15T05:30:00+00:00")  # local midnight passed; "a" is now overdue, "b" due today
+    freezer.move_to(
+        "2026-10-15T05:30:00+00:00"
+    )  # local midnight passed; "a" is now overdue, "b" due today
     await _tick(hass)
     assert hass.states.get(OVERDUE).state == "1"
     assert hass.states.get(TODAY).state == "1"
@@ -117,7 +154,10 @@ async def test_local_day_differs_from_utc_day(hass, load_entry, freezer):
 
 
 async def test_cards_capped_at_20(hass, load_entry):
-    late = [card(f"o{i:02}", f"Late {i:02}", "l_alex", i, due=f"2026-10-13T{i % 24:02}:00:00.000Z") for i in range(25)]
+    late = [
+        card(f"o{i:02}", f"Late {i:02}", "l_alex", i, due=f"2026-10-13T{i % 24:02}:00:00.000Z")
+        for i in range(25)
+    ]
     await load_entry(b1=board(cards=late))
     attrs = hass.states.get(OVERDUE).attributes
     assert hass.states.get(OVERDUE).state == "25"
@@ -147,7 +187,9 @@ async def test_unavailable_when_board_inaccessible(hass, sensors, mock_trello):
 
 async def test_unchanged_tick_writes_nothing(hass, load_entry, freezer):
     # Without "Week edge": it would legitimately enter the 7-day window as the clock moves.
-    entry = await load_entry(b1=board(cards=[c for c in CARDS if c["id"] != "s2"]), expires_at=LONG_TOKEN)
+    entry = await load_entry(
+        b1=board(cards=[c for c in CARDS if c["id"] != "s2"]), expires_at=LONG_TOKEN
+    )
     _no_refresh_schedule(entry)
     written = []
 
@@ -159,7 +201,10 @@ async def test_unchanged_tick_writes_nothing(hass, load_entry, freezer):
     def _seen(event) -> None:
         written.append(event.data["entity_id"])
 
-    for event_type in ("state_changed", "state_reported"):  # reported = written again with the same state
+    for event_type in (
+        "state_changed",
+        "state_reported",
+    ):  # reported = written again with the same state
         hass.bus.async_listen(event_type, _seen, event_filter=_ours)
     freezer.tick(65)
     await _tick(hass)

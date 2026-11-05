@@ -1,5 +1,7 @@
 """Tests for the HA-free Trello client."""
+
 import re
+
 import aiohttp
 import pytest
 
@@ -24,6 +26,7 @@ class TokenBroken(Exception):
 @pytest.fixture
 async def client():
     async with aiohttp.ClientSession() as session:
+
         async def get_token() -> str:
             return TOKEN
 
@@ -90,6 +93,7 @@ async def test_network_error(client, mock_trello):
 
 async def test_token_errors_propagate_unchanged(mock_trello):
     async with aiohttp.ClientSession() as session:
+
         async def get_token() -> str:
             raise TokenBroken
 
@@ -101,7 +105,12 @@ async def test_token_errors_propagate_unchanged(mock_trello):
 async def test_last_list_move(client, mock_trello):
     mock_trello.get(
         card_actions_url("c9"),
-        payload=[{"type": "updateCard", "data": {"listBefore": {"id": "l_sam"}, "listAfter": {"id": "l_done"}}}],
+        payload=[
+            {
+                "type": "updateCard",
+                "data": {"listBefore": {"id": "l_sam"}, "listAfter": {"id": "l_done"}},
+            }
+        ],
     )
     assert await client.get_last_list_move("c9") == "l_sam"
     (req,) = calls(mock_trello, "GET", f"{API}/cards/c9/actions")
@@ -122,7 +131,6 @@ async def test_writes_send_json(client, mock_trello):
     assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"closed": True}]
 
 
-
 from custom_components.trello_todo.api import TrelloWebhookExistsError  # noqa: E402
 
 from .common import WEBHOOKS_URL, actions_url  # noqa: E402
@@ -135,8 +143,13 @@ async def test_board_member_names(client, mock_trello):
 
 
 async def test_create_webhook(client, mock_trello):
-    mock_trello.post(re.compile(r"^https://api\.trello\.com/1/webhooks(\?.*)?$"), payload={"id": "w1", "active": True})
-    created = await client.create_webhook("https://hook.example/x", "b1", "Home Assistant: Household")
+    mock_trello.post(
+        re.compile(r"^https://api\.trello\.com/1/webhooks(\?.*)?$"),
+        payload={"id": "w1", "active": True},
+    )
+    created = await client.create_webhook(
+        "https://hook.example/x", "b1", "Home Assistant: Household"
+    )
     assert created["id"] == "w1"
     (req,) = calls(mock_trello, "POST", WEBHOOKS_URL)
     assert req.kwargs["params"] == {
@@ -221,7 +234,10 @@ from .common import card_url, checklists_url  # noqa: E402
 async def test_board_labels_and_usernames(client, mock_trello):
     mock_trello.get(BOARD_URL, payload=board())
     result = await client.get_board("b1")
-    assert {i: (lb.name, lb.color) for i, lb in result.labels.items()} == {"lb1": ("Urgent", "red"), "lb2": ("", "green")}
+    assert {i: (lb.name, lb.color) for i, lb in result.labels.items()} == {
+        "lb1": ("Urgent", "red"),
+        "lb2": ("", "green"),
+    }
     assert result.member_usernames == {"m1": "sam", "m2": "alex"}
     (req,) = calls(mock_trello, "GET", f"{API}/boards/b1")
     assert req.kwargs["params"]["member_fields"] == "fullName,initials,username"
@@ -269,7 +285,11 @@ async def test_card_sub_resources(client, mock_trello):
     assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idLabels/lb1")) == 1
     assert len(calls(mock_trello, "DELETE", f"{API}/cards/c1/idMembers/m2")) == 1
     (req,) = calls(mock_trello, "GET", f"{API}/cards/c1/checklists")
-    assert req.kwargs["params"] == {"fields": "name", "checkItems": "all", "checkItem_fields": "name,state"}
+    assert req.kwargs["params"] == {
+        "fields": "name",
+        "checkItems": "all",
+        "checkItem_fields": "name,state",
+    }
 
 
 async def test_cleared_fields_sent_as_null_query_params(client, mock_trello):
@@ -287,4 +307,3 @@ async def test_only_cleared_fields_send_no_body(client, mock_trello):
     (put,) = calls(mock_trello, "PUT", f"{API}/cards/c1")
     assert put.kwargs["params"] == {"due": "null"}
     assert put.kwargs["json"] is None
-

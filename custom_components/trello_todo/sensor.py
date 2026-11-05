@@ -1,4 +1,5 @@
 """Due-date summary sensors per board: overdue, due today, due soon, next due."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -26,7 +27,9 @@ type Bucket = list[tuple[datetime, TrelloCard]]
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: TrelloConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
+    hass: HomeAssistant,
+    entry: TrelloConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     for subentry_id, coordinator in entry.runtime_data.boards.items():
         due = _BoardDue(coordinator)
@@ -34,7 +37,11 @@ async def async_setup_entry(
         entry.async_on_unload(coordinator.async_add_listener(due.invalidate))
         entry.async_on_unload(
             async_track_time_interval(
-                hass, due.tick, TICK, name=f"trello due {coordinator.board_title}", cancel_on_shutdown=True
+                hass,
+                due.tick,
+                TICK,
+                name=f"trello due {coordinator.board_title}",
+                cancel_on_shutdown=True,
             )
         )
         add_when_loaded(
@@ -42,7 +49,10 @@ async def async_setup_entry(
             subentry_id,
             coordinator,
             async_add_entities,
-            lambda c, due=due: [*(TrelloDueCountSensor(c, due, key) for key in COUNT_KEYS), TrelloNextDueSensor(c, due)],
+            lambda c, due=due: [
+                *(TrelloDueCountSensor(c, due, key) for key in COUNT_KEYS),
+                TrelloNextDueSensor(c, due),
+            ],
         )
 
 
@@ -55,7 +65,8 @@ def due_buckets(board: TrelloBoard, done_list: str | None, now: datetime) -> dic
             (due, card)
             for list_cards in board.cards.values()
             for card in list_cards
-            if not card_is_complete(card, done_list) and (due := parse_trello_time(card.due)) is not None
+            if not card_is_complete(card, done_list)
+            and (due := parse_trello_time(card.due)) is not None
         ),
         key=lambda item: item[0],
     )

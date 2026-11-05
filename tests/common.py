@@ -1,4 +1,5 @@
 """Shared test data, shaped like real Trello API responses."""
+
 from __future__ import annotations
 
 import re
@@ -69,9 +70,14 @@ def board(
             # Out of pos order on purpose: the integration must sort.
             card("c2", "Call plumber", "l_alex", 32768, due="2026-10-15T22:30:00.000Z"),
             card(
-                "c1", "Buy stamps", "l_alex", 16384,
-                desc="Forever stamps", due="2026-10-15T05:00:00.000Z",
-                labels=["lb1"], members=["m1", "m2"],
+                "c1",
+                "Buy stamps",
+                "l_alex",
+                16384,
+                desc="Forever stamps",
+                due="2026-10-15T05:00:00.000Z",
+                labels=["lb1"],
+                members=["m1", "m2"],
             ),
             card("c3", "Pay invoice", "l_alex", 65536),
             card("c4", "Mow lawn", "l_sam", 100),
@@ -115,7 +121,10 @@ def calls(mock, method: str, url: str) -> list:
 def bodies(mock, method: str, url: str) -> list[dict]:
     """The fields each request sent: its JSON body plus cleared fields (`?due=null` query params) as None."""
     return [
-        {**(c.kwargs.get("json") or {}), **{k: None for k, v in (c.kwargs.get("params") or {}).items() if v == "null"}}
+        {
+            **(c.kwargs.get("json") or {}),
+            **{k: None for k, v in (c.kwargs.get("params") or {}).items() if v == "null"},
+        }
         for c in calls(mock, method, url)
     ]
 
@@ -151,7 +160,9 @@ def board_subentry(
     )
 
 
-def make_entry(hass, *subentries: ConfigSubentryData, expires_at: float | None = None) -> MockConfigEntry:
+def make_entry(
+    hass, *subentries: ConfigSubentryData, expires_at: float | None = None
+) -> MockConfigEntry:
     """An account entry. Defaults to one board sub-entry for Household."""
     entry = MockConfigEntry(
         domain="trello_todo",
@@ -180,8 +191,15 @@ WEBHOOKS_URL = f"{API}/webhooks"
 PEOPLE = {"m1": ("Sam", "S"), "m2": ("Alex", "A")}
 
 
-def action(aid: str, kind: str, *, by: str = "m2", date: str = "2026-10-13T12:00:00.000Z",
-           member: dict | None = None, **data) -> dict:
+def action(
+    aid: str,
+    kind: str,
+    *,
+    by: str = "m2",
+    date: str = "2026-10-13T12:00:00.000Z",
+    member: dict | None = None,
+    **data,
+) -> dict:
     """A Trello action record, shaped like webhook payloads and /boards/{id}/actions entries."""
     name, initials = PEOPLE.get(by, ("Someone", "?"))
     record = {
