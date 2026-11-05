@@ -1,4 +1,5 @@
 """Trello actions → Home Assistant events. No Home Assistant imports."""
+
 from __future__ import annotations
 
 from collections import deque
@@ -66,7 +67,9 @@ class ActionContext:
     me: str | None
     done_list: str | None
     members: dict[str, str] = field(default_factory=dict)
-    card_lists: dict[str, tuple[str, str]] = field(default_factory=dict)  # card id -> (list id, list name)
+    card_lists: dict[str, tuple[str, str]] = field(
+        default_factory=dict
+    )  # card id -> (list id, list name)
 
 
 def _ref(obj: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -100,7 +103,10 @@ def map_action(action: dict[str, Any], ctx: ActionContext) -> tuple[str, dict[st
     card = data.get("card") or {}
     current_list = data.get("listAfter") or data.get("list") or {}
     if not current_list.get("id") and (known := ctx.card_lists.get(card.get("id") or "")):
-        current_list = {"id": known[0], "name": known[1]}  # Trello omits the list on label/checklist actions
+        current_list = {
+            "id": known[0],
+            "name": known[1],
+        }  # Trello omits the list on label/checklist actions
     creator = action.get("memberCreator") or {}
     creator_id = action.get("idMemberCreator") or creator.get("id")
     attrs: dict[str, Any] = {
@@ -137,7 +143,10 @@ def map_action(action: dict[str, Any], ctx: ActionContext) -> tuple[str, dict[st
             member = action.get("member") or {}
             member_id = data.get("idMember") or member.get("id")
             attrs |= {
-                "member": {"id": member_id, "name": member.get("fullName") or ctx.members.get(member_id or "")},
+                "member": {
+                    "id": member_id,
+                    "name": member.get("fullName") or ctx.members.get(member_id or ""),
+                },
                 "for_me": bool(member_id) and member_id == ctx.me,
             }
         case "label_added" | "label_removed":
@@ -161,7 +170,9 @@ class ActivityProcessor:
 
     MEMORY = 200
 
-    def __init__(self, context: Callable[[], ActionContext], refresh: Callable[[], Awaitable[None]]) -> None:
+    def __init__(
+        self, context: Callable[[], ActionContext], refresh: Callable[[], Awaitable[None]]
+    ) -> None:
         self._context = context
         self._refresh = refresh
         self._seen: deque[str] = deque()
@@ -197,7 +208,9 @@ class ActivityProcessor:
         self.baselined = True
 
     async def async_process(self, actions: list[dict[str, Any]]) -> None:
-        self.baselined = True  # live activity is a starting point too: a later feed poll continues from it
+        self.baselined = (
+            True  # live activity is a starting point too: a later feed poll continues from it
+        )
         new = [a for a in sorted(actions, key=lambda a: a.get("date") or "") if self._remember(a)]
         if not new:
             return

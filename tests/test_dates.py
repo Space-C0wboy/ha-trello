@@ -1,4 +1,5 @@
 """Tests for the card model additions and the shared date helpers."""
+
 from datetime import UTC, datetime
 
 from custom_components.trello_todo.api import BOARD_PARAMS, parse_board
@@ -16,8 +17,18 @@ def test_start_requested():
 
 
 def test_card_fields_parsed():
-    b = _board(card("c1", "A", "l_alex", 1, due="2026-10-15T22:30:00.000Z", start="2026-10-15T20:00:00.000Z",
-                    due_complete=True, members=["m2", "gone", "m1"]))
+    b = _board(
+        card(
+            "c1",
+            "A",
+            "l_alex",
+            1,
+            due="2026-10-15T22:30:00.000Z",
+            start="2026-10-15T20:00:00.000Z",
+            due_complete=True,
+            members=["m2", "gone", "m1"],
+        )
+    )
     c = b.card("c1")
     assert c.due_complete is True
     assert c.start == "2026-10-15T20:00:00.000Z"
@@ -31,7 +42,9 @@ def test_card_defaults():
 
 
 def test_parse_trello_time():
-    assert parse_trello_time("2026-10-15T22:30:00.000Z") == datetime(2026, 10, 15, 22, 30, tzinfo=UTC)
+    assert parse_trello_time("2026-10-15T22:30:00.000Z") == datetime(
+        2026, 10, 15, 22, 30, tzinfo=UTC
+    )
     assert parse_trello_time(None) is None
     assert parse_trello_time("") is None
     assert parse_trello_time("not a date") is None

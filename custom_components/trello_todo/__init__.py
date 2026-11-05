@@ -1,4 +1,5 @@
 """Trello for Home Assistant: boards as devices, lists as to-do lists."""
+
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,15 @@ from typing import Any
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
-from homeassistant.helpers import config_entry_oauth2_flow, config_validation as cv, issue_registry as ir
+from homeassistant.helpers import (
+    config_entry_oauth2_flow,
+)
+from homeassistant.helpers import (
+    config_validation as cv,
+)
+from homeassistant.helpers import (
+    issue_registry as ir,
+)
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.typing import ConfigType
 
@@ -33,12 +42,18 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 
 
 def _board_settings(entry: TrelloConfigEntry) -> dict[str, dict[str, Any]]:
-    return {sid: dict(sub.data) for sid, sub in entry.subentries.items() if sub.subentry_type == SUBENTRY_BOARD}
+    return {
+        sid: dict(sub.data)
+        for sid, sub in entry.subentries.items()
+        if sub.subentry_type == SUBENTRY_BOARD
+    }
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bool:
     """Set up a Trello account and each of its boards."""
-    implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(hass, entry)
+    implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(
+        hass, entry
+    )
     session = config_entry_oauth2_flow.OAuth2Session(hass, entry, implementation)
 
     async def get_token() -> str:
@@ -48,7 +63,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
     client = TrelloClient(async_get_clientsession(hass), get_token)
     settings = _board_settings(entry)
     _delete_stale_issues(hass, {data[CONF_BOARD_ID] for data in settings.values()})
-    boards = {sid: TrelloBoardCoordinator(hass, entry, client, entry.subentries[sid]) for sid in settings}
+    boards = {
+        sid: TrelloBoardCoordinator(hass, entry, client, entry.subentries[sid]) for sid in settings
+    }
 
     # Boards load independently: one unreachable board must not keep the others down.
     for coordinator in boards.values():
@@ -57,7 +74,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
     if any(isinstance(err, ConfigEntryAuthFailed) for err in errors):
         raise ConfigEntryAuthFailed("Trello no longer accepts the stored authorization")
     # Retry only when every board failed transiently; a deleted board loads as unavailable with a repair.
-    if boards and len(errors) == len(boards) and not any(isinstance(e.__cause__, TrelloAccessError) for e in errors):
+    if (
+        boards
+        and len(errors) == len(boards)
+        and not any(isinstance(e.__cause__, TrelloAccessError) for e in errors)
+    ):
         raise ConfigEntryNotReady("No Trello board could be loaded")
 
     entry.runtime_data = TrelloRuntimeData(
@@ -66,7 +87,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> bo
     for coordinator in boards.values():
         # Baseline: anything that happened before this start is not replayed as events.
         await coordinator.async_poll_feed()
-    manager = WebhookManager(hass, entry, client, getattr(implementation, "client_secret", "") or "")
+    manager = WebhookManager(
+        hass, entry, client, getattr(implementation, "client_secret", "") or ""
+    )
     entry.runtime_data.webhooks = manager
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))
     for coordinator in boards.values():
@@ -82,7 +105,11 @@ def _delete_stale_issues(hass: HomeAssistant, board_ids: set[str]) -> None:
     """Drop "board inaccessible" repairs for boards that are no longer set up."""
     prefix = "board_inaccessible_"
     for domain, issue_id in list(ir.async_get(hass).issues):
-        if domain == DOMAIN and issue_id.startswith(prefix) and issue_id.removeprefix(prefix) not in board_ids:
+        if (
+            domain == DOMAIN
+            and issue_id.startswith(prefix)
+            and issue_id.removeprefix(prefix) not in board_ids
+        ):
             ir.async_delete_issue(hass, DOMAIN, issue_id)
 
 
@@ -103,7 +130,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> N
     if not states:
         return
     try:
-        implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(hass, entry)
+        implementation = await config_entry_oauth2_flow.async_get_config_entry_implementation(
+            hass, entry
+        )
         token = dict(entry.data["token"])
 
         async def get_token() -> str:
@@ -113,7 +142,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: TrelloConfigEntry) -> N
                 token = await implementation.async_refresh_token(token)
             return token["access_token"]
 
-        manager = WebhookManager(hass, entry, TrelloClient(async_get_clientsession(hass), get_token), "")
+        manager = WebhookManager(
+            hass, entry, TrelloClient(async_get_clientsession(hass), get_token), ""
+        )
         for board_id in list(states):
             await manager.async_remove_board(board_id, save=False)
     except Exception:  # noqa: BLE001 - removal must never fail because Trello is unreachable

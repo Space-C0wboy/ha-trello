@@ -1,4 +1,5 @@
 """One to-do entity per open Trello list, added and removed as the board changes."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -16,7 +17,8 @@ from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util, slugify
+from homeassistant.util import dt as dt_util
+from homeassistant.util import slugify
 
 from .api import TrelloBoard, TrelloCard, TrelloClient, parse_card
 from .const import DOMAIN, DONE_ARCHIVE, DONE_MOVE, DONE_MOVE_AND_ARCHIVE, MAX_ITEMS_ATTRIBUTE
@@ -30,7 +32,9 @@ POS_STEP = 16384.0
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: TrelloConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
+    hass: HomeAssistant,
+    entry: TrelloConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     for subentry_id, coordinator in entry.runtime_data.boards.items():
         tracker = _ListTracker(hass, entry, subentry_id, coordinator, async_add_entities)
@@ -79,7 +83,11 @@ class _ListTracker:
             if list_id in self._known:
                 continue
             owner = registry.async_get_entity_id("todo", DOMAIN, list_id)
-            if owner and (reg := registry.async_get(owner)) and reg.config_subentry_id != self._subentry_id:
+            if (
+                owner
+                and (reg := registry.async_get(owner))
+                and reg.config_subentry_id != self._subentry_id
+            ):
                 # Still another board's list (mid "Move list"): take it over once that board lets go of it.
                 continue
             new.append(list_id)
@@ -92,7 +100,11 @@ class _ListTracker:
         for list_id in [list_id for list_id in self._known if list_id not in board.lists]:
             self._known.discard(list_id)
             entity_id = registry.async_get_entity_id("todo", DOMAIN, list_id)
-            if entity_id and (reg := registry.async_get(entity_id)) and reg.config_subentry_id == self._subentry_id:
+            if (
+                entity_id
+                and (reg := registry.async_get(entity_id))
+                and reg.config_subentry_id == self._subentry_id
+            ):
                 registry.async_remove(entity_id)
 
 
@@ -170,7 +182,9 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
             if card.id == uid:
                 return card
         raise ServiceValidationError(
-            translation_domain=DOMAIN, translation_key="item_not_found", translation_placeholders={"uid": str(uid)}
+            translation_domain=DOMAIN,
+            translation_key="item_not_found",
+            translation_placeholders={"uid": str(uid)},
         )
 
     def _update_from_board(self) -> None:
@@ -249,14 +263,20 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
         raise ServiceValidationError(translation_domain=DOMAIN, translation_key="no_return_list")
 
     async def async_create_todo_item(self, item: TodoItem) -> None:
-        fields: dict[str, Any] = {"idList": self._list_id, "name": item.summary or "", "desc": item.description or ""}
+        fields: dict[str, Any] = {
+            "idList": self._list_id,
+            "name": item.summary or "",
+            "desc": item.description or "",
+        }
         if item.due is not None:
             fields["due"] = due_to_trello(item.due)
         fields["pos"] = "bottom"
         await self._write(
             lambda client: client.create_card(fields),
             lambda board, raw: (
-                None if board.card(raw["id"]) else board.cards.setdefault(self._list_id, []).append(parse_card(raw, {}, {}))
+                None
+                if board.card(raw["id"])
+                else board.cards.setdefault(self._list_id, []).append(parse_card(raw, {}, {}))
             ),
         )
 
@@ -272,7 +292,9 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
 
             await self._write(
                 reopen,
-                lambda board, target: apply_card_fields(board, card, {**fields, "idList": target, "pos": "top"}),
+                lambda board, target: apply_card_fields(
+                    board, card, {**fields, "idList": target, "pos": "top"}
+                ),
             )
             return
         if not self.is_done_list and item.status == TodoItemStatus.COMPLETED:
@@ -291,7 +313,9 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
             for card in cards:
                 await client.update_card(card.id, {"closed": True})
 
-        await self._write(archive, lambda board, _: [apply_card_fields(board, c, {"closed": True}) for c in cards])
+        await self._write(
+            archive, lambda board, _: [apply_card_fields(board, c, {"closed": True}) for c in cards]
+        )
 
     async def async_move_todo_item(self, uid: str, previous_uid: str | None = None) -> None:
         card = self._card(uid)
@@ -303,7 +327,11 @@ class TrelloTodoList(CoordinatorEntity[TrelloBoardCoordinator], TodoListEntity):
         else:
             prev = self._card(previous_uid)
             index = others.index(prev)
-            pos = (prev.pos + others[index + 1].pos) / 2 if index + 1 < len(others) else prev.pos + POS_STEP
+            pos = (
+                (prev.pos + others[index + 1].pos) / 2
+                if index + 1 < len(others)
+                else prev.pos + POS_STEP
+            )
         await self._write(
             lambda client: client.update_card(card.id, {"pos": pos}),
             lambda board, _: apply_card_fields(board, card, {"pos": pos}),

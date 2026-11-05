@@ -1,4 +1,5 @@
 """One calendar per board: every card with a due date is an event ending at its due time."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta
@@ -26,10 +27,14 @@ COMPLETE_PREFIX = "✓ "
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: TrelloConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
+    hass: HomeAssistant,
+    entry: TrelloConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     for subentry_id, coordinator in entry.runtime_data.boards.items():
-        add_when_loaded(entry, subentry_id, coordinator, async_add_entities, lambda c: [TrelloDueCalendar(c)])
+        add_when_loaded(
+            entry, subentry_id, coordinator, async_add_entities, lambda c: [TrelloDueCalendar(c)]
+        )
 
 
 def card_event(board: TrelloBoard, card: TrelloCard, done_list: str | None) -> CalendarEvent | None:
@@ -54,7 +59,9 @@ class TrelloDueCalendar(CoordinatorEntity[TrelloBoardCoordinator], CalendarEntit
 
     _attr_has_entity_name = True
     _attr_translation_key = "due_dates"
-    _attr_supported_features = CalendarEntityFeature.UPDATE_EVENT | CalendarEntityFeature.DELETE_EVENT
+    _attr_supported_features = (
+        CalendarEntityFeature.UPDATE_EVENT | CalendarEntityFeature.DELETE_EVENT
+    )
     # Card descriptions can be long; keep them out of history.
     _unrecorded_attributes = frozenset({"description"})
 
@@ -93,7 +100,9 @@ class TrelloDueCalendar(CoordinatorEntity[TrelloBoardCoordinator], CalendarEntit
     def _card(self, uid: str) -> TrelloCard:
         if (board := self.coordinator.data) is None or (card := board.card(uid)) is None:
             raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="card_not_found", translation_placeholders={"card": uid}
+                translation_domain=DOMAIN,
+                translation_key="card_not_found",
+                translation_placeholders={"card": uid},
             )
         return card
 
@@ -107,11 +116,15 @@ class TrelloDueCalendar(CoordinatorEntity[TrelloBoardCoordinator], CalendarEntit
         card = self._card(uid)
         start, end = event.get(EVENT_START), event.get(EVENT_END)
         if not isinstance(start, datetime) or not isinstance(end, datetime):
-            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_event_times")
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="invalid_event_times"
+            )
         # In UTC: same-zone local times compare by wall clock, which is wrong across the fall-back hour.
         start, end = dt_util.as_utc(start), dt_util.as_utc(end)
         if start >= end:
-            raise ServiceValidationError(translation_domain=DOMAIN, translation_key="invalid_event_times")
+            raise ServiceValidationError(
+                translation_domain=DOMAIN, translation_key="invalid_event_times"
+            )
         fields = {
             "due": end.isoformat(),
             "start": None if end - start == DEFAULT_LENGTH else start.isoformat(),

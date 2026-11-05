@@ -1,11 +1,11 @@
 """Tests for writes from HA to Trello."""
+
 import time
 
 import pytest
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
 from .common import (
-    card_url,
     API,
     LISTS,
     TOKEN_URL,
@@ -15,6 +15,7 @@ from .common import (
     calls,
     card,
     card_actions_url,
+    card_url,
 )
 
 ALEX = "todo.alex"
@@ -32,9 +33,17 @@ def _board_requests(mock, board_id="b1") -> int:
 async def test_create(hass, loaded, mock_trello):
     mock_trello.post(f"{API}/cards", payload=card("new", "Milk", "l_alex", 99))
     before = _board_requests(mock_trello)
-    await _service(hass, "add_item", {"item": "Milk", "description": "2%", "due_date": "2026-10-20"})
+    await _service(
+        hass, "add_item", {"item": "Milk", "description": "2%", "due_date": "2026-10-20"}
+    )
     assert bodies(mock_trello, "POST", f"{API}/cards") == [
-        {"idList": "l_alex", "name": "Milk", "desc": "2%", "due": "2026-10-20T05:00:00+00:00", "pos": "bottom"}
+        {
+            "idList": "l_alex",
+            "name": "Milk",
+            "desc": "2%",
+            "due": "2026-10-20T05:00:00+00:00",
+            "pos": "bottom",
+        }
     ]
     assert _board_requests(mock_trello) == before + 1  # refreshed right after the write
 
@@ -49,8 +58,12 @@ async def test_create_with_datetime(hass, loaded, mock_trello):
 
 async def test_update_fields(hass, loaded, mock_trello):
     mock_trello.put(card_url("c1"), payload={})
-    await _service(hass, "update_item", {"item": "c1", "rename": "Buy more stamps", "description": "x"})
-    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"name": "Buy more stamps", "desc": "x"}]
+    await _service(
+        hass, "update_item", {"item": "c1", "rename": "Buy more stamps", "description": "x"}
+    )
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [
+        {"name": "Buy more stamps", "desc": "x"}
+    ]
 
 
 async def test_update_clears_due(hass, loaded, mock_trello):
@@ -78,7 +91,9 @@ async def test_update_by_summary(hass, loaded, mock_trello):
         ("move_and_archive", "l_done", {"idList": "l_done", "pos": "top", "closed": True}),
     ],
 )
-async def test_complete_done_behaviors(hass, load_entry, mock_trello, behavior, done_list, expected):
+async def test_complete_done_behaviors(
+    hass, load_entry, mock_trello, behavior, done_list, expected
+):
     await load_entry(board_subentry(done_behavior=behavior, done_list=done_list))
     mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "status": "completed"})
@@ -88,7 +103,9 @@ async def test_complete_done_behaviors(hass, load_entry, mock_trello, behavior, 
 async def test_complete_with_rename_is_one_request(hass, loaded, mock_trello):
     mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "rename": "Stamps", "status": "completed"})
-    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [{"name": "Stamps", "idList": "l_done", "pos": "top"}]
+    assert bodies(mock_trello, "PUT", f"{API}/cards/c1") == [
+        {"name": "Stamps", "idList": "l_done", "pos": "top"}
+    ]
 
 
 async def test_complete_when_done_list_missing(hass, load_entry, mock_trello):
@@ -179,7 +196,9 @@ async def test_uncheck_with_no_other_list(hass, load_entry, mock_trello):
     await load_entry(b1=board(lists=[LISTS[2]], cards=[card("c9", "Old thing", "l_done", 1)]))
     mock_trello.get(card_actions_url("c9"), payload=[])
     with pytest.raises(ServiceValidationError) as info:
-        await _service(hass, "update_item", {"item": "c9", "status": "needs_action"}, entity_id=DONE)
+        await _service(
+            hass, "update_item", {"item": "c9", "status": "needs_action"}, entity_id=DONE
+        )
     assert info.value.translation_key == "no_return_list"
     assert calls(mock_trello, "PUT", f"{API}/cards/c9") == []
 
@@ -192,7 +211,9 @@ async def test_rename_completed_item_keeps_it_done(hass, loaded, mock_trello):
 
 async def test_clear_completed_archives(hass, loaded, mock_trello):
     mock_trello.put(card_url("c9"), payload={})
-    await hass.services.async_call("todo", "remove_completed_items", {"entity_id": DONE}, blocking=True)
+    await hass.services.async_call(
+        "todo", "remove_completed_items", {"entity_id": DONE}, blocking=True
+    )
     assert bodies(mock_trello, "PUT", f"{API}/cards/c9") == [{"closed": True}]
 
 
@@ -208,11 +229,17 @@ async def test_write_refreshes_only_its_board(hass, load_entry, mock_trello):
 async def test_write_with_expired_token_refreshes_first(hass, loaded, mock_trello):
     """Review Focus 5."""
     hass.config_entries.async_update_entry(
-        loaded, data={**loaded.data, "token": {**loaded.data["token"], "expires_at": time.time() - 10}}
+        loaded,
+        data={**loaded.data, "token": {**loaded.data["token"], "expires_at": time.time() - 10}},
     )
     mock_trello.post(
         TOKEN_URL,
-        payload={"access_token": "new-access", "refresh_token": "new-refresh", "expires_in": 3600, "token_type": "Bearer"},
+        payload={
+            "access_token": "new-access",
+            "refresh_token": "new-refresh",
+            "expires_in": 3600,
+            "token_type": "Bearer",
+        },
     )
     mock_trello.put(card_url("c1"), payload={})
     await _service(hass, "update_item", {"item": "c1", "status": "completed"})
@@ -222,7 +249,8 @@ async def test_write_with_expired_token_refreshes_first(hass, loaded, mock_trell
 
 async def test_write_when_token_endpoint_down(hass, loaded, mock_trello):
     hass.config_entries.async_update_entry(
-        loaded, data={**loaded.data, "token": {**loaded.data["token"], "expires_at": time.time() - 10}}
+        loaded,
+        data={**loaded.data, "token": {**loaded.data["token"], "expires_at": time.time() - 10}},
     )
     mock_trello.post(TOKEN_URL, status=503)
     with pytest.raises(HomeAssistantError) as info:

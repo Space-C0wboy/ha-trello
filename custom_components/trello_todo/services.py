@@ -1,4 +1,5 @@
 """Trello actions for automations: create, copy, move, archive/restore, due, comments, labels, members, checklists."""
+
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -10,9 +11,16 @@ from typing import Any
 import voluptuous as vol
 from aiohttp import ClientError
 from homeassistant.config_entries import ConfigEntryState
-from homeassistant.core import HomeAssistant, ServiceCall, ServiceResponse, SupportsResponse, callback
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+    callback,
+)
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
-from homeassistant.helpers import config_validation as cv, entity_registry as er
+from homeassistant.helpers import config_validation as cv
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from .api import TrelloAccessError, TrelloAuthError, TrelloClient, TrelloError, reason_code
@@ -122,13 +130,17 @@ async def _resolve_card(hass: HomeAssistant, data: dict[str, Any]) -> CardTarget
                 if err.status == 400:  # Trello's "invalid id": a typo, not an outage
                     continue
                 _raise_api(hass, coordinator, err)
-            except (TrelloError, ClientError, HomeAssistantError) as err:
+            except (ClientError, HomeAssistantError) as err:  # TrelloError is handled above
                 _raise_api(hass, coordinator, err)
             target = boards.get(raw.get("idBoard", ""))
             if target is None:
                 raise ResolveError("card_board_not_configured", card=data["card"])
             return CardTarget(
-                _with_data(target), raw["id"], raw.get("idList", ""), raw.get("name") or "", raw.get("shortUrl") or ""
+                _with_data(target),
+                raw["id"],
+                raw.get("idList", ""),
+                raw.get("name") or "",
+                raw.get("shortUrl") or "",
             )
         raise ResolveError("card_not_found", card=data["card"])
     coordinator, list_id = _todo_list(hass, data["entity_id"])
@@ -139,7 +151,9 @@ async def _resolve_card(hass: HomeAssistant, data: dict[str, Any]) -> CardTarget
             raise
         # A card created or moved moments ago may not be cached yet (refreshes are debounced): look once more.
         await coordinator.async_refresh()
-        card = find_card_in_list(_with_data(coordinator).data.cards.get(list_id, []), data["card_name"])
+        card = find_card_in_list(
+            _with_data(coordinator).data.cards.get(list_id, []), data["card_name"]
+        )
     return CardTarget(coordinator, card.id, card.list_id, card.name, card.url)
 
 
@@ -149,7 +163,9 @@ def _raise_api(hass: HomeAssistant, coordinator: TrelloBoardCoordinator, err: Ex
         coordinator.config_entry.async_start_reauth(hass)
         raise HomeAssistantError(translation_domain=DOMAIN, translation_key="auth_failed") from err
     raise HomeAssistantError(
-        translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": reason_code(err)}
+        translation_domain=DOMAIN,
+        translation_key="api_error",
+        translation_placeholders={"error": reason_code(err)},
     ) from err
 
 
@@ -167,7 +183,9 @@ async def _api(
         if isinstance(err, TrelloAccessError):
             # The card, or the list/label/member/board the call refers to, is gone or not visible.
             raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="trello_not_found", translation_placeholders={"card": card}
+                translation_domain=DOMAIN,
+                translation_key="trello_not_found",
+                translation_placeholders={"card": card},
             ) from err
         _raise_api(hass, coordinator, err)
     except (ClientError, HomeAssistantError) as err:  # a failed token refresh
@@ -192,7 +210,12 @@ def _info(coordinator: TrelloBoardCoordinator, raw: dict[str, Any], **extra: Any
 def _target_info(target: CardTarget, **extra: Any) -> dict[str, Any]:
     return _info(
         target.coordinator,
-        {"id": target.card_id, "shortUrl": target.url, "name": target.name, "idList": target.list_id},
+        {
+            "id": target.card_id,
+            "shortUrl": target.url,
+            "name": target.name,
+            "idList": target.list_id,
+        },
         **extra,
     )
 
@@ -200,14 +223,18 @@ def _target_info(target: CardTarget, **extra: Any) -> dict[str, Any]:
 Result = tuple[dict[str, Any], list[TrelloBoardCoordinator]]
 
 
-def _handler(fn: Callable[[ServiceCall], Awaitable[Result]]) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
+def _handler(
+    fn: Callable[[ServiceCall], Awaitable[Result]],
+) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
     @wraps(fn)
     async def wrapper(call: ServiceCall) -> ServiceResponse:
         try:
             info, touched = await fn(call)
         except ResolveError as err:
             raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key=err.key, translation_placeholders=err.placeholders
+                translation_domain=DOMAIN,
+                translation_key=err.key,
+                translation_placeholders=err.placeholders,
             ) from err
         for coordinator in dict.fromkeys(touched):  # dedupe, keep order
             await coordinator.async_request_refresh()
@@ -275,9 +302,13 @@ async def _create_card(call: ServiceCall) -> Result:
     if (due := _due(data.get("due"))) is not None:
         fields["due"] = due
     if _names(data.get("labels") or []):
-        fields["idLabels"] = ",".join(resolve_label(board, value) for value in _names(data["labels"]))
+        fields["idLabels"] = ",".join(
+            resolve_label(board, value) for value in _names(data["labels"])
+        )
     if _names(data.get("members") or []):
-        fields["idMembers"] = ",".join(resolve_member(board, value) for value in _names(data["members"]))
+        fields["idMembers"] = ",".join(
+            resolve_member(board, value) for value in _names(data["members"])
+        )
     raw = await _api(hass, coordinator, lambda client: client.create_card(fields))
     return _info(coordinator, raw), [coordinator]
 
@@ -324,11 +355,17 @@ async def _move_card(call: ServiceCall) -> Result:
     hass, data = call.hass, call.data
     target = await _resolve_card(hass, data)
     dest = _board_target(hass, data.get("board"), target.coordinator)
-    fields: dict[str, Any] = {"idList": resolve_list(dest.data, data["list"]), "pos": data["position"]}
+    fields: dict[str, Any] = {
+        "idList": resolve_list(dest.data, data["list"]),
+        "pos": data["position"],
+    }
     if dest.board_id != target.coordinator.board_id:
         fields["idBoard"] = dest.board_id
     raw = await _api(
-        hass, target.coordinator, lambda client: client.update_card(target.card_id, fields), card=target.card_id
+        hass,
+        target.coordinator,
+        lambda client: client.update_card(target.card_id, fields),
+        card=target.card_id,
     )
     return _info(dest, raw), [target.coordinator, dest]
 
@@ -369,7 +406,10 @@ async def _set_due(call: ServiceCall) -> Result:
     if "due_complete" in data:
         fields["dueComplete"] = data["due_complete"]
     raw = await _api(
-        hass, target.coordinator, lambda client: client.update_card(target.card_id, fields), card=target.card_id
+        hass,
+        target.coordinator,
+        lambda client: client.update_card(target.card_id, fields),
+        card=target.card_id,
     )
     return _info(target.coordinator, raw), [target.coordinator]
 
@@ -393,7 +433,9 @@ LABEL_SCHEMA = _card_schema({vol.Required("label"): cv.string})
 MEMBER_SCHEMA = _card_schema({vol.Required("member"): cv.string})
 
 
-def _membership_handler(field: str, add: bool) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
+def _membership_handler(
+    field: str, add: bool
+) -> Callable[[ServiceCall], Awaitable[ServiceResponse]]:
     """Labels and members. Already as asked (on the card for add, off it for remove) is a success with no write."""
 
     @_handler
@@ -412,7 +454,9 @@ def _membership_handler(field: str, add: bool) -> Callable[[ServiceCall], Awaita
             lambda client: client.get_card(target.card_id, "idLabels,idMembers"),
             card=target.card_id,
         )
-        on_card = value_id in ((current or {}).get("idLabels" if field == "label" else "idMembers") or [])
+        on_card = value_id in (
+            (current or {}).get("idLabels" if field == "label" else "idMembers") or []
+        )
         if on_card == add:
             return _target_info(target), []
         await _api(
@@ -426,9 +470,15 @@ def _membership_handler(field: str, add: bool) -> Callable[[ServiceCall], Awaita
     return handle
 
 
-ADD_ITEM_SCHEMA = _card_schema({vol.Required("item"): cv.string, vol.Optional("checklist", default="Checklist"): cv.string})
+ADD_ITEM_SCHEMA = _card_schema(
+    {vol.Required("item"): cv.string, vol.Optional("checklist", default="Checklist"): cv.string}
+)
 SET_ITEM_SCHEMA = _card_schema(
-    {vol.Required("item"): cv.string, vol.Required("checked"): cv.boolean, vol.Optional("checklist"): cv.string}
+    {
+        vol.Required("item"): cv.string,
+        vol.Required("checked"): cv.boolean,
+        vol.Optional("checklist"): cv.string,
+    }
 )
 
 
@@ -442,17 +492,31 @@ async def _add_checklist_item(call: ServiceCall) -> Result:
     hass, data = call.hass, call.data
     target = await _resolve_card(hass, data)
     card_id = target.card_id
-    checklists = await _api(hass, target.coordinator, lambda client: client.get_checklists(card_id), card=card_id)
+    checklists = await _api(
+        hass, target.coordinator, lambda client: client.get_checklists(card_id), card=card_id
+    )
     found = _named(checklists or [], data["checklist"])
     if len(found) > 1:
         raise ResolveError("checklist_ambiguous", value=data["checklist"])
-    checklist = found[0] if found else await _api(
-        hass, target.coordinator, lambda client: client.create_checklist(card_id, data["checklist"]), card=card_id
+    checklist = (
+        found[0]
+        if found
+        else await _api(
+            hass,
+            target.coordinator,
+            lambda client: client.create_checklist(card_id, data["checklist"]),
+            card=card_id,
+        )
     )
     item = await _api(
-        hass, target.coordinator, lambda client: client.add_check_item(checklist["id"], data["item"]), card=card_id
+        hass,
+        target.coordinator,
+        lambda client: client.add_check_item(checklist["id"], data["item"]),
+        card=card_id,
     )
-    return _target_info(target, checklist_id=checklist["id"], item_id=(item or {}).get("id")), [target.coordinator]
+    return _target_info(target, checklist_id=checklist["id"], item_id=(item or {}).get("id")), [
+        target.coordinator
+    ]
 
 
 @_handler
@@ -460,20 +524,30 @@ async def _set_checklist_item(call: ServiceCall) -> Result:
     hass, data = call.hass, call.data
     target = await _resolve_card(hass, data)
     card_id = target.card_id
-    checklists = await _api(hass, target.coordinator, lambda client: client.get_checklists(card_id), card=card_id) or []
+    checklists = (
+        await _api(
+            hass, target.coordinator, lambda client: client.get_checklists(card_id), card=card_id
+        )
+        or []
+    )
     if data.get("checklist"):
         checklists = _named(checklists, data["checklist"])
         if not checklists:
             raise ResolveError("checklist_not_found", value=data["checklist"])
     items = [item for checklist in checklists for item in checklist.get("checkItems") or []]
-    matches = [item for item in items if item.get("id") == data["item"]] or _named(items, data["item"])
+    matches = [item for item in items if item.get("id") == data["item"]] or _named(
+        items, data["item"]
+    )
     if not matches:
         raise ResolveError("checklist_item_not_found", value=data["item"])
     if len(matches) > 1:
         raise ResolveError("checklist_item_ambiguous", value=data["item"])
     state = "complete" if data["checked"] else "incomplete"
     await _api(
-        hass, target.coordinator, lambda client: client.set_check_item(card_id, matches[0]["id"], state), card=card_id
+        hass,
+        target.coordinator,
+        lambda client: client.set_check_item(card_id, matches[0]["id"], state),
+        card=card_id,
     )
     return _target_info(target), [target.coordinator]
 
@@ -499,4 +573,6 @@ SERVICES: dict[str, tuple[Callable[[ServiceCall], Awaitable[ServiceResponse]], v
 @callback
 def async_setup_services(hass: HomeAssistant) -> None:
     for name, (handler, schema) in SERVICES.items():
-        hass.services.async_register(DOMAIN, name, handler, schema=schema, supports_response=SupportsResponse.OPTIONAL)
+        hass.services.async_register(
+            DOMAIN, name, handler, schema=schema, supports_response=SupportsResponse.OPTIONAL
+        )

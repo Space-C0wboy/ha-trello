@@ -1,4 +1,5 @@
 """Tests for the per-board activity event entity."""
+
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 
@@ -63,12 +64,31 @@ async def test_event_fired_with_attributes(hass, loaded, mock_trello):
 async def test_batch_fires_every_event_in_order(hass, loaded):
     """Review Focus 4: each event in a burst reaches automations."""
     seen = _capture(hass)
-    await _coordinator(loaded).processor.async_process([
-        action("a2", "commentCard", date="2026-10-13T12:00:02Z", card=CARD, list=ALEX_LIST, text="second"),
-        action("a1", "commentCard", date="2026-10-13T12:00:01Z", card=CARD, list=ALEX_LIST, text="first"),
-    ])
+    await _coordinator(loaded).processor.async_process(
+        [
+            action(
+                "a2",
+                "commentCard",
+                date="2026-10-13T12:00:02Z",
+                card=CARD,
+                list=ALEX_LIST,
+                text="second",
+            ),
+            action(
+                "a1",
+                "commentCard",
+                date="2026-10-13T12:00:01Z",
+                card=CARD,
+                list=ALEX_LIST,
+                text="first",
+            ),
+        ]
+    )
     await hass.async_block_till_done()
-    assert [a["comment"] for a in seen if a.get("event_type") == "comment_added"] == ["first", "second"]
+    assert [a["comment"] for a in seen if a.get("event_type") == "comment_added"] == [
+        "first",
+        "second",
+    ]
 
 
 async def test_source_follows_mode(hass, loaded):
@@ -106,4 +126,7 @@ async def test_board_down_at_startup_gets_event_entity_later(hass, setup_credent
     mock_trello.get(board_url("b2"), payload=second_board())
     await _coordinator(entry, "b2").async_refresh()
     await hass.async_block_till_done()
-    assert er.async_get(hass).async_get_entity_id("event", DOMAIN, "b2_activity") == "event.projects_activity"
+    assert (
+        er.async_get(hass).async_get_entity_id("event", DOMAIN, "b2_activity")
+        == "event.projects_activity"
+    )

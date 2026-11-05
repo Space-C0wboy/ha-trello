@@ -1,4 +1,5 @@
 """Trello webhooks: public URL choice, create/reuse/teardown, health check, and the signed-request handler."""
+
 from __future__ import annotations
 
 import base64
@@ -27,7 +28,14 @@ from .api import (
     TrelloWebhookExistsError,
     reason_code,
 )
-from .const import CONF_RETIRED_WEBHOOKS, CONF_WEBHOOKS, DOMAIN, MODE_FEED, MODE_WEBHOOK, WEBHOOK_REFRESH_MINUTES
+from .const import (
+    CONF_RETIRED_WEBHOOKS,
+    CONF_WEBHOOKS,
+    DOMAIN,
+    MODE_FEED,
+    MODE_WEBHOOK,
+    WEBHOOK_REFRESH_MINUTES,
+)
 
 if TYPE_CHECKING:
     from .coordinator import TrelloBoardCoordinator
@@ -71,7 +79,9 @@ def signature(secret: str, body: bytes, callback_url: str) -> str:
 class WebhookManager:
     """One per account entry. Board webhook state lives in entry.data["webhooks"], which never triggers a reload."""
 
-    def __init__(self, hass: HomeAssistant, entry: ConfigEntry, client: TrelloClient, client_secret: str) -> None:
+    def __init__(
+        self, hass: HomeAssistant, entry: ConfigEntry, client: TrelloClient, client_secret: str
+    ) -> None:
         self.hass = hass
         self.entry = entry
         self.client = client
@@ -97,7 +107,9 @@ class WebhookManager:
             states.pop(board_id, None)
         else:
             states[board_id] = state
-        self.hass.config_entries.async_update_entry(self.entry, data={**self.entry.data, CONF_WEBHOOKS: states})
+        self.hass.config_entries.async_update_entry(
+            self.entry, data={**self.entry.data, CONF_WEBHOOKS: states}
+        )
 
     def _retire(self, webhook_id: str, *, persist: bool = True) -> None:
         """A Trello webhook may still deliver to this id: answer 410 so Trello deletes it.
@@ -108,7 +120,9 @@ class WebhookManager:
         self._unregister(webhook_id)
         self._register_gone(webhook_id)
         if persist:
-            retired = [w for w in self.entry.data.get(CONF_RETIRED_WEBHOOKS) or [] if w != webhook_id]
+            retired = [
+                w for w in self.entry.data.get(CONF_RETIRED_WEBHOOKS) or [] if w != webhook_id
+            ]
             retired = [*retired, webhook_id][-MAX_RETIRED:]
             self.hass.config_entries.async_update_entry(
                 self.entry, data={**self.entry.data, CONF_RETIRED_WEBHOOKS: retired}
@@ -136,7 +150,9 @@ class WebhookManager:
     @callback
     def _async_health(self, _now: datetime | None = None) -> None:
         # An entry background task is cancelled when the entry unloads, so a check can not outlive a reload.
-        self.entry.async_create_background_task(self.hass, self._async_check_all(), "trello webhook health")
+        self.entry.async_create_background_task(
+            self.hass, self._async_check_all(), "trello webhook health"
+        )
 
     async def _async_check_all(self) -> None:
         for coordinator in list(self._boards.values()):
@@ -179,7 +195,9 @@ class WebhookManager:
             if healthy is not False:  # healthy, or a Trello/network blip: keep the webhook
                 self._ok(coordinator)
                 return
-            await self._delete_quietly(trello_id)  # if this fails, creating again hits "already exists" below
+            await self._delete_quietly(
+                trello_id
+            )  # if this fails, creating again hits "already exists" below
         url, reason = await self._callback_url(webhook_id)
         if self._closed:
             return
@@ -212,7 +230,10 @@ class WebhookManager:
             return
         if self._closed:
             return
-        self._save(board_id, {"webhook_id": webhook_id, "trello_webhook_id": created["id"], "callback_url": url})
+        self._save(
+            board_id,
+            {"webhook_id": webhook_id, "trello_webhook_id": created["id"], "callback_url": url},
+        )
         self._ok(coordinator)
 
     async def async_remove_board(self, board_id: str, *, save: bool = True) -> None:
@@ -226,7 +247,10 @@ class WebhookManager:
                 self._unregister(webhook_id)
                 try:
                     await _delete_cloudhook(self.hass, webhook_id)
-                except (HomeAssistantError, ValueError):  # CloudNotAvailable, or no cloudhook for this id
+                except (
+                    HomeAssistantError,
+                    ValueError,
+                ):  # CloudNotAvailable, or no cloudhook for this id
                     pass
             else:
                 self._retire(webhook_id)
@@ -236,10 +260,14 @@ class WebhookManager:
 
     # -- helpers ---------------------------------------------------------------
     async def _create(self, coordinator: TrelloBoardCoordinator, url: str) -> dict[str, Any]:
-        return await self.client.create_webhook(url, coordinator.board_id, f"Home Assistant: {coordinator.board_title}")
+        return await self.client.create_webhook(
+            url, coordinator.board_id, f"Home Assistant: {coordinator.board_title}"
+        )
 
     @callback
-    def _create_failed(self, coordinator: TrelloBoardCoordinator, webhook_id: str, url: str, err: Exception) -> None:
+    def _create_failed(
+        self, coordinator: TrelloBoardCoordinator, webhook_id: str, url: str, err: Exception
+    ) -> None:
         _LOGGER.debug("Creating the Trello webhook for %s failed: %s", coordinator.board_title, err)
         if isinstance(err, TrelloAuthError):
             self.entry.async_start_reauth(self.hass)
@@ -256,12 +284,20 @@ class WebhookManager:
                 try:
                     await _delete_cloudhook(self.hass, webhook_id)
                     return await _create_cloudhook(self.hass, webhook_id), ""
-                except (ValueError, HomeAssistantError):
+                except ValueError, HomeAssistantError:
                     return None, "cloud_not_connected"
-            except HomeAssistantError:  # CloudNotConnected right after boot: retry at the next health check
+            except (
+                HomeAssistantError
+            ):  # CloudNotConnected right after boot: retry at the next health check
                 return None, "cloud_not_connected"
         try:
-            base = get_url(self.hass, allow_internal=False, allow_ip=False, require_ssl=True, prefer_external=True)
+            base = get_url(
+                self.hass,
+                allow_internal=False,
+                allow_ip=False,
+                require_ssl=True,
+                prefer_external=True,
+            )
         except NoURLAvailableError:
             return None, "no_public_url"
         return f"{base}{webhook.async_generate_path(webhook_id)}", ""
@@ -294,7 +330,12 @@ class WebhookManager:
             return
         try:
             webhook.async_register(
-                self.hass, DOMAIN, f"Trello {board_id}", webhook_id, self._async_handle, allowed_methods={"POST"}
+                self.hass,
+                DOMAIN,
+                f"Trello {board_id}",
+                webhook_id,
+                self._async_handle,
+                allowed_methods={"POST"},
             )
         except ValueError:  # still held by a manager that is unloading
             _LOGGER.debug("Webhook handler for %s is still registered", board_id)
@@ -306,7 +347,12 @@ class WebhookManager:
             return
         try:
             webhook.async_register(
-                self.hass, DOMAIN, "Trello (retired)", webhook_id, self._async_gone, allowed_methods={"POST"}
+                self.hass,
+                DOMAIN,
+                "Trello (retired)",
+                webhook_id,
+                self._async_gone,
+                allowed_methods={"POST"},
             )
         except ValueError:
             return
@@ -325,15 +371,21 @@ class WebhookManager:
     def _fail(self, coordinator: TrelloBoardCoordinator, reason: str) -> None:
         if self.failures.get(coordinator.board_id) != reason:
             _LOGGER.warning(
-                "Trello webhook unavailable for %s (%s); polling its activity instead", coordinator.board_title, reason
+                "Trello webhook unavailable for %s (%s); polling its activity instead",
+                coordinator.board_title,
+                reason,
             )
         self.failures[coordinator.board_id] = reason
         coordinator.set_mode(MODE_FEED)
 
-    async def _async_gone(self, hass: HomeAssistant, webhook_id: str, request: web.Request) -> web.Response:
+    async def _async_gone(
+        self, hass: HomeAssistant, webhook_id: str, request: web.Request
+    ) -> web.Response:
         return web.Response(status=HTTPStatus.GONE)  # Trello deletes webhooks that answer 410
 
-    async def _async_handle(self, hass: HomeAssistant, webhook_id: str, request: web.Request) -> web.Response:
+    async def _async_handle(
+        self, hass: HomeAssistant, webhook_id: str, request: web.Request
+    ) -> web.Response:
         board_id = self._by_webhook.get(webhook_id)
         coordinator = self._boards.get(board_id) if board_id else None
         callback_url = self._states().get(board_id or "", {}).get("callback_url")
@@ -343,7 +395,9 @@ class WebhookManager:
         # so re-encoding gives back the exact bytes it signed.
         body = (await request.text()).encode("utf-8")
         expected = signature(self._secret, body, callback_url)
-        if not self._secret or not hmac.compare_digest(request.headers.get("X-Trello-Webhook", ""), expected):
+        if not self._secret or not hmac.compare_digest(
+            request.headers.get("X-Trello-Webhook", ""), expected
+        ):
             self.bad_signatures += 1
             streak = self._bad_streak.get(board_id, 0) + 1
             self._bad_streak[board_id] = streak
@@ -360,7 +414,7 @@ class WebhookManager:
             self._ok(coordinator)
         try:
             action = json.loads(body)["action"]
-        except (ValueError, KeyError, TypeError):
+        except ValueError, KeyError, TypeError:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         if not isinstance(action, dict):
             return web.Response(status=HTTPStatus.BAD_REQUEST)

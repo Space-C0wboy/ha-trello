@@ -1,7 +1,9 @@
 """Tests for adding, reconfiguring and removing board sub-entries."""
+
 from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
 from homeassistant.data_entry_flow import FlowResultType
-from homeassistant.helpers import device_registry as dr, entity_registry as er
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 
 from .common import (
     BOARDS,
@@ -11,13 +13,15 @@ from .common import (
     board_subentry,
     board_url,
     lists_url,
-    subentry_id,
     second_board,
+    subentry_id,
 )
 
 
 async def _start(hass, entry):
-    return await hass.config_entries.subentries.async_init((entry.entry_id, "board"), context={"source": SOURCE_USER})
+    return await hass.config_entries.subentries.async_init(
+        (entry.entry_id, "board"), context={"source": SOURCE_USER}
+    )
 
 
 def _select_values(result, field: str) -> list[str]:
@@ -34,15 +38,23 @@ async def test_add_board(hass, loaded, mock_trello):
     assert result["step_id"] == "user"
     assert _select_values(result, "board") == ["b2"]  # b1 is already configured
 
-    result = await hass.config_entries.subentries.async_configure(result["flow_id"], {"board": "b2"})
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"board": "b2"}
+    )
     assert result["step_id"] == "done"
-    result = await hass.config_entries.subentries.async_configure(result["flow_id"], {"done_behavior": "archive"})
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"done_behavior": "archive"}
+    )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     await hass.async_block_till_done()
 
     sid = subentry_id(loaded, "b2")
     assert loaded.subentries[sid].title == "Projects"
-    assert dict(loaded.subentries[sid].data) == {"board_id": "b2", "done_behavior": "archive", "done_list": None}
+    assert dict(loaded.subentries[sid].data) == {
+        "board_id": "b2",
+        "done_behavior": "archive",
+        "done_list": None,
+    }
     assert loaded.runtime_data.boards[sid].board_id == "b2"
 
 
@@ -50,8 +62,12 @@ async def test_add_board_requires_done_list_for_move(hass, loaded, mock_trello):
     mock_trello.get(BOARDS_URL, payload=BOARDS)
     mock_trello.get(lists_url("b2"), payload=LISTS_B2)
     result = await _start(hass, loaded)
-    result = await hass.config_entries.subentries.async_configure(result["flow_id"], {"board": "b2"})
-    result = await hass.config_entries.subentries.async_configure(result["flow_id"], {"done_behavior": "move"})
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"board": "b2"}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"done_behavior": "move"}
+    )
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"done_list": "done_list_required"}
 
@@ -104,7 +120,10 @@ async def test_board_on_other_account_not_offered(hass, loaded, mock_trello):
     from pytest_homeassistant_custom_component.common import MockConfigEntry
 
     MockConfigEntry(
-        domain="trello_todo", unique_id="m2", title="Alex", data={},
+        domain="trello_todo",
+        unique_id="m2",
+        title="Alex",
+        data={},
         subentries_data=[board_subentry("b2", "Projects", "archive", None)],
     ).add_to_hass(hass)
     mock_trello.get(BOARDS_URL, payload=BOARDS)

@@ -1,4 +1,5 @@
 """Card writes shared by the to-do lists and the calendar: run, map errors, mirror locally, refresh."""
+
 from __future__ import annotations
 
 import logging
@@ -7,9 +8,21 @@ from dataclasses import replace
 from typing import TYPE_CHECKING, Any
 
 from aiohttp import ClientError
-from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError, ServiceValidationError
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    HomeAssistantError,
+    ServiceValidationError,
+)
 
-from .api import TrelloAccessError, TrelloAuthError, TrelloBoard, TrelloCard, TrelloClient, TrelloError, reason_code
+from .api import (
+    TrelloAccessError,
+    TrelloAuthError,
+    TrelloBoard,
+    TrelloCard,
+    TrelloClient,
+    TrelloError,
+    reason_code,
+)
 from .const import DOMAIN
 
 if TYPE_CHECKING:
@@ -63,7 +76,11 @@ async def async_card_write(
         if local is not None and (board := coordinator.data) is not None:
             try:
                 local(board, result)
-            except (KeyError, TypeError, ValueError) as err:  # the refresh below corrects the board anyway
+            except (
+                KeyError,
+                TypeError,
+                ValueError,
+            ) as err:  # the refresh below corrects the board anyway
                 _LOGGER.debug("Could not mirror a Trello write locally: %s", err)
             else:
                 coordinator.async_set_updated_data(board)
@@ -76,10 +93,14 @@ async def async_card_write(
     except (TrelloError, ClientError) as err:  # ClientError: a failed token refresh
         if card is not None and isinstance(err, TrelloAccessError):
             raise ServiceValidationError(
-                translation_domain=DOMAIN, translation_key="card_not_found", translation_placeholders={"card": card}
+                translation_domain=DOMAIN,
+                translation_key="card_not_found",
+                translation_placeholders={"card": card},
             ) from err
         raise HomeAssistantError(
-            translation_domain=DOMAIN, translation_key="api_error", translation_placeholders={"error": reason_code(err)}
+            translation_domain=DOMAIN,
+            translation_key="api_error",
+            translation_placeholders={"error": reason_code(err)},
         ) from err
     finally:
         await coordinator.async_request_refresh()

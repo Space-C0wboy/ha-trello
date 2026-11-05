@@ -1,4 +1,5 @@
 """Tests for name → id resolution."""
+
 import pytest
 
 from custom_components.trello_todo.api import parse_board
@@ -46,7 +47,10 @@ def test_resolve_list_by_name_case_insensitive_and_id():
 
 
 def test_list_not_found():
-    assert _err(resolve_list, BOARD, "Dones") == ("list_not_found", {"value": "Dones", "board": "Household"})
+    assert _err(resolve_list, BOARD, "Dones") == (
+        "list_not_found",
+        {"value": "Dones", "board": "Household"},
+    )
 
 
 def test_list_ambiguous():

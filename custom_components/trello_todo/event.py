@@ -1,4 +1,5 @@
 """One activity event entity per board: fires an event for each Trello activity."""
+
 from __future__ import annotations
 
 from typing import Any
@@ -16,10 +17,14 @@ PARALLEL_UPDATES = 0
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: TrelloConfigEntry, async_add_entities: AddConfigEntryEntitiesCallback
+    hass: HomeAssistant,
+    entry: TrelloConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     for subentry_id, coordinator in entry.runtime_data.boards.items():
-        add_when_loaded(entry, subentry_id, coordinator, async_add_entities, lambda c: [TrelloActivityEvent(c)])
+        add_when_loaded(
+            entry, subentry_id, coordinator, async_add_entities, lambda c: [TrelloActivityEvent(c)]
+        )
 
 
 class TrelloActivityEvent(CoordinatorEntity[TrelloBoardCoordinator], EventEntity):

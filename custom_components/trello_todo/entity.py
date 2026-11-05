@@ -1,4 +1,5 @@
 """Entity setup shared by the per-board platforms."""
+
 from __future__ import annotations
 
 from collections.abc import Callable

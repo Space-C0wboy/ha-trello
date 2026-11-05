@@ -1,4 +1,5 @@
 """Due-date helpers shared by the calendar and the sensors."""
+
 from __future__ import annotations
 
 from datetime import datetime

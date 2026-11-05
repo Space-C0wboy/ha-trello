@@ -1,4 +1,5 @@
 """The calendar and the due-date sensors follow board sub-entries: added, removed, or late at startup."""
+
 from homeassistant.config_entries import SOURCE_USER
 from homeassistant.helpers import entity_registry as er
 
@@ -30,7 +31,10 @@ PER_BOARD = (
 
 def _entity_ids(hass, board_id: str) -> list[str | None]:
     registry = er.async_get(hass)
-    return [registry.async_get_entity_id(domain, DOMAIN, f"{board_id}_{key}") for domain, key in PER_BOARD]
+    return [
+        registry.async_get_entity_id(domain, DOMAIN, f"{board_id}_{key}")
+        for domain, key in PER_BOARD
+    ]
 
 
 async def test_board_added_gets_calendar_and_sensors(hass, loaded, mock_trello):
@@ -38,9 +42,15 @@ async def test_board_added_gets_calendar_and_sensors(hass, loaded, mock_trello):
     mock_trello.get(lists_url("b2"), payload=LISTS_B2)
     mock_trello.get(board_url("b2"), payload=second_board(), repeat=True)
     mock_trello.get(actions_url("b2"), payload=[], repeat=True)
-    result = await hass.config_entries.subentries.async_init((loaded.entry_id, "board"), context={"source": SOURCE_USER})
-    result = await hass.config_entries.subentries.async_configure(result["flow_id"], {"board": "b2"})
-    await hass.config_entries.subentries.async_configure(result["flow_id"], {"done_behavior": "archive"})
+    result = await hass.config_entries.subentries.async_init(
+        (loaded.entry_id, "board"), context={"source": SOURCE_USER}
+    )
+    result = await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"board": "b2"}
+    )
+    await hass.config_entries.subentries.async_configure(
+        result["flow_id"], {"done_behavior": "archive"}
+    )
     await hass.async_block_till_done()
     ids = _entity_ids(hass, "b2")
     assert ids == [
